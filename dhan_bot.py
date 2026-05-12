@@ -10,10 +10,10 @@ import string
 import warnings
 warnings.filterwarnings('ignore')
 
-# ========== FYERS CREDENTIALS ==========
+# ========== FYERS CREDENTIALS (नए टोकन से अपडेट करें) ==========
 FYERS_APP_ID = "ER78MCCWG0-100"           
 FYERS_SECRET_ID = "9MLTKAAHCQ"      
-FYERS_ACCESS_TOKEN = "JVHC6XLKBY6OOII5VSAKRTA3QTOIO2MM"  # Your access token
+FYERS_ACCESS_TOKEN = "JVHC6XLKBY6OOII5VSAKRTA3QTOIO2MM"  # ⚠️ 24 घंटे में एक्सपायर होगा
 REDIRECT_URI = "http://127.0.0.1:8501"
 
 # ========== PAGE CONFIG ==========
@@ -24,7 +24,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ========== BLACK PROFESSIONAL CSS ==========
+# ========== CSS (SAME AS BEFORE) ==========
 st.markdown("""
 <style>
     .stApp { background-color: #050505; }
@@ -70,7 +70,7 @@ PASSWORD = "stock123"
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "fyers_token" not in st.session_state:
-    st.session_state.fyers_token = FYERS_ACCESS_TOKEN  # Auto-assign token
+    st.session_state.fyers_token = FYERS_ACCESS_TOKEN
 if "signals" not in st.session_state:
     st.session_state.signals = []
 if "last_scan" not in st.session_state:
@@ -105,24 +105,22 @@ if not st.session_state["authenticated"]:
     show_login()
     st.stop()
 
-# ========== FYERS API FUNCTIONS ==========
-def get_dhan_headers():
-    """Generate headers for FYERS API"""
-    return {
-        'Authorization': f"{FYERS_APP_ID}:{st.session_state.fyers_token}",
-        'Content-Type': 'application/json'
-    }
+# ========== उन्नत FYERS API फंक्शन (v3 एंडपॉइंट + हिस्ट्री फॉलबैक) ==========
+def get_auth_header():
+    """वेब एपीआई के लिए सही हेडर बनाएं"""
+    return f"{FYERS_APP_ID}:{st.session_state.fyers_token}"
 
 def get_history_fyers(symbol, resolution="15", days=5):
-    """Get historical data from FYERS API"""
+    """FYERS v3 API से हिस्टोरिकल डेटा लें"""
     if not st.session_state.fyers_token:
         return None
     
     to_date = datetime.now()
     from_date = to_date - timedelta(days=days)
     
-    url = "https://api.fyers.in/api/v2/history"
-    headers = get_dhan_headers()
+    # ✅ v3 एंडपॉइंट
+    url = "https://api.fyers.in/api/v3/history"
+    headers = {"Authorization": get_auth_header()}
     params = {
         'symbol': f"NSE:{symbol}",
         'resolution': resolution,  # 1, 5, 15, 60, D
@@ -142,18 +140,39 @@ def get_history_fyers(symbol, resolution="15", days=5):
                 df.set_index('timestamp', inplace=True)
                 return df
         else:
-            st.error(f"History error {response.status_code} for {symbol}: {response.text[:100]}")
+            # 🔇 ग्राहक को एरर कम दिखाएं लेकिन इग्नोर न करें
+            print(f"History Error {response.status_code}: {response.text[:100]}")
     except Exception as e:
-        st.error(f"History exception {symbol}: {e}")
+        print(f"History Exception: {e}")
+    return None
+
+def get_quote_from_history(symbol):
+    """✨ हिस्टोरिकल डेटा से लाइव प्राइस का अनुमान (बैकअप तरीका)"""
+    try:
+        # पिछले 2 दिनों का डेटा लें
+        df = get_history_fyers(symbol, resolution="D", days=2)
+        if df is not None and len(df) >= 2:
+            latest_close = df['Close'].iloc[-1]
+            prev_close = df['Close'].iloc[-2]
+            change = latest_close - prev_close
+            change_percent = (change / prev_close) * 100
+            return {
+                'ltp': float(latest_close),
+                'change': float(change),
+                'change_percent': float(change_percent)
+            }
+    except Exception as e:
+        print(f"History fallback error for {symbol}: {e}")
     return None
 
 def get_live_quote_fyers(symbol):
-    """Get live quote from FYERS API for gainers/losers"""
+    """फाइनल कोट: पहले v3 `/quotes` कोशिश करें, विफल होने पर हिस्ट्री का इस्तेमाल करें"""
     if not st.session_state.fyers_token:
         return None
     
-    url = "https://api.fyers.in/api/v2/quotations"
-    headers = get_dhan_headers()
+    # ✅ v3 क्वोट एंडपॉइंट
+    url = "https://api.fyers.in/api/v3/quotes"
+    headers = {"Authorization": get_auth_header()}
     params = {'symbols': f"NSE:{symbol}"}
     
     try:
@@ -168,13 +187,13 @@ def get_live_quote_fyers(symbol):
                     'change': float(v_data.get('ch', 0)),
                     'change_percent': float(v_data.get('chp', 0))
                 }
-        else:
-            st.error(f"Quote error {response.status_code} for {symbol}")
     except Exception as e:
-        st.error(f"Quote exception {symbol}: {e}")
-    return None
+        print(f"Quotes API exception for {symbol}: {e}")
+    
+    # 🔁 अगर क्वोट एपीआई काम नहीं करती, तो हिस्ट्री एपीआई से डेटा लें
+    return get_quote_from_history(symbol)
 
-# ========== COMPLETE 207 STOCKS ==========
+# ========== COMPLETE 207 STOCKS (unchanged) ==========
 ALL_STOCKS = [
     "360ONE", "ABB", "ABCAPITAL", "ADANIENSOL", "ADANIENT", "ADANIGREEN", "ADANIPORTS", 
     "ALKEM", "AMBER", "AMBUJACEM", "ANGELONE", "APLAPOLLO", "APOLLOHOSP", "ASHOKLEY", 
@@ -204,7 +223,7 @@ ALL_STOCKS = [
     "UPL", "VBL", "VEDL", "VOLTAS", "WAAREEENER", "WIPRO", "YESBANK", "ZYDUSLIFE"
 ]
 
-# ========== ADVANCED 90% ACCURACY SIGNAL GENERATION (SMC + Indicators) ==========
+# ========== SIGNAL GENERATION (NO CHANGES, SAME AS YOURS) ==========
 def calculate_ema(close, period):
     return close.ewm(span=period, adjust=False).mean()
 
@@ -251,7 +270,6 @@ def calculate_adx(df, period=14):
     return adx, plus_di, minus_di
 
 def detect_smc_patterns(df):
-    """Smart Money Concept Pattern Detection"""
     if len(df) < 30:
         return {'liquidity_sweep_low': False, 'bos_up': False, 'liquidity_sweep_high': False, 'bos_down': False}
     
@@ -286,7 +304,6 @@ def detect_smc_patterns(df):
             'liquidity_sweep_high': liquidity_sweep_high, 'bos_down': bos_down}
 
 def detect_candle_patterns(df):
-    """Candlestick Pattern Detection"""
     if len(df) < 3:
         return []
     patterns = []
@@ -312,7 +329,6 @@ def detect_candle_patterns(df):
     return patterns
 
 def generate_high_accuracy_signal(df, symbol=None):
-    """Generate signal using SMC + Multiple Indicators"""
     if df is None or len(df) < 50:
         return None
     
@@ -321,7 +337,7 @@ def generate_high_accuracy_signal(df, symbol=None):
     low = df['Low']
     volume = df['Volume']
     
-    # Calculate all indicators
+    # इंडिकेटर
     ema9 = calculate_ema(close, 9)
     ema21 = calculate_ema(close, 21)
     ema50 = calculate_ema(close, 50)
@@ -333,11 +349,9 @@ def generate_high_accuracy_signal(df, symbol=None):
     smc = detect_smc_patterns(df)
     candle_patterns = detect_candle_patterns(df)
     
-    # Volume analysis
     avg_volume = volume.rolling(window=20).mean()
     volume_ratio = volume.iloc[-1] / avg_volume.iloc[-1] if avg_volume.iloc[-1] > 0 else 1
     
-    # Current values
     current_price = close.iloc[-1]
     current_ema9 = ema9.iloc[-1]
     current_ema21 = ema21.iloc[-1]
@@ -347,18 +361,16 @@ def generate_high_accuracy_signal(df, symbol=None):
     current_adx = adx.iloc[-1] if not pd.isna(adx.iloc[-1]) else 20
     current_vwap = vwap.iloc[-1]
     
-    # ATR for targets
     atr = (high - low).rolling(14).mean().iloc[-1]
     if pd.isna(atr):
         atr = current_price * 0.01
     
-    # Scoring System (0-100)
     bullish_score = 0
     bearish_score = 0
     reasons_bullish = []
     reasons_bearish = []
     
-    # === EMA TREND (Weight: 25) ===
+    # EMA TREND
     if current_ema9 > current_ema21 > current_ema50:
         bullish_score += 25
         reasons_bullish.append("✅ EMA 9 > 21 > 50 (Strong Uptrend)")
@@ -372,7 +384,7 @@ def generate_high_accuracy_signal(df, symbol=None):
         bearish_score += 15
         reasons_bearish.append("❌ EMA 9 < 21 (Bearish Trend)")
     
-    # === Price vs VWAP (Weight: 15) ===
+    # Price vs VWAP
     if current_price > current_vwap:
         bullish_score += 15
         reasons_bullish.append("✅ Price above VWAP (Bullish)")
@@ -380,7 +392,7 @@ def generate_high_accuracy_signal(df, symbol=None):
         bearish_score += 15
         reasons_bearish.append("❌ Price below VWAP (Bearish)")
     
-    # === RSI (Weight: 20) ===
+    # RSI
     if current_rsi < 30:
         bullish_score += 20
         reasons_bullish.append(f"✅ RSI Oversold: {current_rsi:.1f}")
@@ -394,7 +406,7 @@ def generate_high_accuracy_signal(df, symbol=None):
         bearish_score += 10
         reasons_bearish.append(f"❌ RSI Approaching Overbought: {current_rsi:.1f}")
     
-    # === MACD (Weight: 15) ===
+    # MACD
     if current_macd > 0:
         bullish_score += 15
         reasons_bullish.append(f"✅ MACD Bullish: {current_macd:.4f}")
@@ -402,7 +414,7 @@ def generate_high_accuracy_signal(df, symbol=None):
         bearish_score += 15
         reasons_bearish.append(f"❌ MACD Bearish: {current_macd:.4f}")
     
-    # === Bollinger Bands (Weight: 10) ===
+    # Bollinger Bands
     if current_price <= bb_lower.iloc[-1]:
         bullish_score += 10
         reasons_bullish.append("✅ Price at Lower BB (Support)")
@@ -410,7 +422,7 @@ def generate_high_accuracy_signal(df, symbol=None):
         bearish_score += 10
         reasons_bearish.append("❌ Price at Upper BB (Resistance)")
     
-    # === ADX Trend Strength (Weight: 10) ===
+    # ADX
     if current_adx > 25:
         if plus_di.iloc[-1] > minus_di.iloc[-1]:
             bullish_score += 10
@@ -419,7 +431,7 @@ def generate_high_accuracy_signal(df, symbol=None):
             bearish_score += 10
             reasons_bearish.append(f"❌ Strong Downtrend (ADX: {current_adx:.1f})")
     
-    # === Volume Confirmation (Weight: 10) ===
+    # Volume
     if volume_ratio > 1.5:
         if bullish_score > bearish_score:
             bullish_score += 10
@@ -428,7 +440,7 @@ def generate_high_accuracy_signal(df, symbol=None):
             bearish_score += 10
             reasons_bearish.append(f"❌ High Volume Sell Pressure: {volume_ratio:.1f}x")
     
-    # === Smart Money Concepts (Weight: 20) ===
+    # Smart Money Concepts
     if smc['liquidity_sweep_low']:
         bullish_score += 15
         reasons_bullish.append("🎯 Liquidity Sweep Low (Smart Money Entry)")
@@ -442,7 +454,7 @@ def generate_high_accuracy_signal(df, symbol=None):
         bearish_score += 10
         reasons_bearish.append("📉 Break of Structure DOWN")
     
-    # === Candlestick Patterns (Weight: 10) ===
+    # Candlestick Patterns
     for pattern in candle_patterns:
         if "Bullish" in pattern or "Hammer" in pattern:
             bullish_score += 10
@@ -451,49 +463,30 @@ def generate_high_accuracy_signal(df, symbol=None):
             bearish_score += 10
             reasons_bearish.append(f"📊 {pattern}")
     
-    # Final Decision - Only STRONG signals
     if bullish_score >= 75 and bullish_score > bearish_score:
         probability = min(98, bullish_score)
         return {
-            'signal': 'STRONG_BUY',
-            'probability': probability,
-            'price': current_price,
-            'target1': current_price + (atr * 1.5),
-            'target2': current_price + (atr * 2.5),
-            'target3': current_price + (atr * 4),
-            'stop_loss': current_price - (atr * 1.2),
-            'rsi': current_rsi,
-            'adx': current_adx,
-            'volume_ratio': volume_ratio,
-            'vwap': current_vwap,
-            'ema9': current_ema9, 'ema21': current_ema21, 'ema50': current_ema50,
-            'reasons': reasons_bullish[:8],
-            'candle_patterns': candle_patterns,
-            'smc': smc
+            'signal': 'STRONG_BUY', 'probability': probability, 'price': current_price,
+            'target1': current_price + (atr * 1.5), 'target2': current_price + (atr * 2.5),
+            'target3': current_price + (atr * 4), 'stop_loss': current_price - (atr * 1.2),
+            'rsi': current_rsi, 'adx': current_adx, 'volume_ratio': volume_ratio,
+            'vwap': current_vwap, 'ema9': current_ema9, 'ema21': current_ema21, 'ema50': current_ema50,
+            'reasons': reasons_bullish[:8], 'candle_patterns': candle_patterns, 'smc': smc
         }
     elif bearish_score >= 75 and bearish_score > bullish_score:
         probability = min(98, bearish_score)
         return {
-            'signal': 'STRONG_SELL',
-            'probability': probability,
-            'price': current_price,
-            'target1': current_price - (atr * 1.5),
-            'target2': current_price - (atr * 2.5),
-            'target3': current_price - (atr * 4),
-            'stop_loss': current_price + (atr * 1.2),
-            'rsi': current_rsi,
-            'adx': current_adx,
-            'volume_ratio': volume_ratio,
-            'vwap': current_vwap,
-            'ema9': current_ema9, 'ema21': current_ema21, 'ema50': current_ema50,
-            'reasons': reasons_bearish[:8],
-            'candle_patterns': candle_patterns,
-            'smc': smc
+            'signal': 'STRONG_SELL', 'probability': probability, 'price': current_price,
+            'target1': current_price - (atr * 1.5), 'target2': current_price - (atr * 2.5),
+            'target3': current_price - (atr * 4), 'stop_loss': current_price + (atr * 1.2),
+            'rsi': current_rsi, 'adx': current_adx, 'volume_ratio': volume_ratio,
+            'vwap': current_vwap, 'ema9': current_ema9, 'ema21': current_ema21, 'ema50': current_ema50,
+            'reasons': reasons_bearish[:8], 'candle_patterns': candle_patterns, 'smc': smc
         }
     
     return None
 
-# ========== GET TOP GAINERS & LOSERS ==========
+# ========== TOP GAINERS, LOSERS, MARKET TREND (इन्फॉलबैक के साथ) ==========
 def get_top_gainers_losers():
     gainers = []
     losers = []
@@ -501,7 +494,7 @@ def get_top_gainers_losers():
                    "KOTAKBANK", "BAJFINANCE", "ITC", "LT", "WIPRO", "AXISBANK", "HCLTECH"]
     
     for symbol in main_stocks:
-        q = get_live_quote_fyers(symbol)
+        q = get_live_quote_fyers(symbol)  # ✅ v3 + history fallback
         if q and q['change_percent'] != 0:
             data = {'symbol': symbol, 'price': q['ltp'], 'change': q['change'], 'change_percent': q['change_percent']}
             if q['change_percent'] > 0:
@@ -514,7 +507,6 @@ def get_top_gainers_losers():
     losers.sort(key=lambda x: x['change_percent'])
     return gainers[:5], losers[:5]
 
-# ========== DETECT MARKET TREND ==========
 def detect_market_trend():
     bullish = 0
     bearish = 0
@@ -548,7 +540,6 @@ def scan_all_stocks():
         progress_bar.progress((i+1)/total)
         
         try:
-            # Use 15-minute resolution for better signal accuracy
             df = get_history_fyers(symbol, resolution="15", days=5)
             if df is not None and len(df) > 30:
                 signal_data = generate_high_accuracy_signal(df, symbol)
@@ -558,20 +549,18 @@ def scan_all_stocks():
                     signal_data['entry_time'] = datetime.now().strftime("%H:%M:%S")
                     signals.append(signal_data)
         except Exception as e:
-            pass
+            # 😥 बिना बताए धीरे से पास करें, लेकिन log में देखने के लिए प्रिंट करें
+            print(f"Scan error for {symbol}: {e}")
         
-        time.sleep(0.03)  # Rate limiting
+        time.sleep(0.05)  # Rate limiting से बचने के लिए पर्याप्त गैप
     
     progress_bar.empty()
     status_text.empty()
-    
-    # Sort by probability (highest first)
     signals.sort(key=lambda x: x['probability'], reverse=True)
     return signals
 
 # ========== TRADINGVIEW CHART ==========
 def get_tradingview_chart(symbol):
-    """Get TradingView chart widget"""
     return f"""
     <div style="border-radius: 15px; overflow: hidden; background: #0a0a0a; padding: 5px;">
         <div class="tradingview-widget-container" style="height:500px;">
@@ -579,40 +568,27 @@ def get_tradingview_chart(symbol):
             <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
             <script type="text/javascript">
             new TradingView.widget({{
-                "width": "100%",
-                "height": 500,
-                "symbol": "NSE:{symbol}",
-                "interval": "15",
-                "timezone": "Asia/Kolkata",
-                "theme": "dark",
-                "style": "1",
-                "locale": "in",
-                "toolbar_bg": "#0a0a0a",
-                "enable_publishing": false,
+                "width": "100%", "height": 500, "symbol": "NSE:{symbol}", "interval": "15",
+                "timezone": "Asia/Kolkata", "theme": "dark", "style": "1", "locale": "in",
+                "toolbar_bg": "#0a0a0a", "enable_publishing": false,
                 "container_id": "tradingview_chart_{symbol}",
-                "studies": [
-                    "RSI@tv-basicstudies",
-                    "MACD@tv-basicstudies",
-                    "BB@tv-basicstudies"
-                ]
+                "studies": ["RSI@tv-basicstudies", "MACD@tv-basicstudies", "BB@tv-basicstudies"]
             }});
             </script>
         </div>
     </div>
     """
 
-# ========== MAIN APP ==========
+# ========== MAIN APP (NO CHANGES LOGIC) ==========
 def main():
     st.markdown("<h1>🎯 90% ACCURACY SIGNAL BOT</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #ffaa00;'>SMC | EMA 9/21/50 | RSI | MACD | VWAP | ADX | FYERS Live Data</p>", unsafe_allow_html=True)
     
-    # Check if token exists
     if st.session_state.fyers_token:
         st.markdown(f"<div style='text-align:center'><span class='api-status'>✅ FYERS API Connected | 207 Stocks | 15-Minute Timeframe</span></div>", unsafe_allow_html=True)
     else:
         st.markdown("<div style='text-align:center'><span class='api-status'>⚠️ FYERS API Not Connected</span></div>", unsafe_allow_html=True)
     
-    # Market Trend
     market_trend, trend_msg = detect_market_trend()
     st.session_state.market_trend = market_trend
     
@@ -625,13 +601,11 @@ def main():
     
     st.markdown("---")
     
-    # ========== TOP GAINERS & LOSERS SECTION ==========
+    # Gainers / Losers
     st.markdown("<h2>📊 TOP 5 GAINERS & LOSERS</h2>", unsafe_allow_html=True)
-    
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         refresh_btn = st.button("🔄 Refresh Gainers/Losers", use_container_width=True)
-    
     if refresh_btn or not st.session_state.top_gainers:
         with st.spinner("Fetching top gainers and losers..."):
             st.session_state.top_gainers, st.session_state.top_losers = get_top_gainers_losers()
@@ -655,16 +629,14 @@ def main():
     
     st.markdown("---")
     
-    # ========== SIDEBAR CONTROLS ==========
+    # Sidebar
     with st.sidebar:
         st.markdown("## ⚙️ CONTROLS")
         st.markdown("---")
-        
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.authenticated = False
             st.session_state.fyers_token = None
             st.rerun()
-        
         st.markdown("---")
         st.markdown("### 🔐 FYERS API STATUS")
         if st.session_state.fyers_token:
@@ -672,7 +644,6 @@ def main():
         else:
             st.error("❌ NOT CONNECTED")
         st.info(f"Client ID: {FYERS_APP_ID[:10]}...")
-        
         st.markdown("---")
         current_hour = datetime.now().hour
         if 9 <= current_hour < 15:
@@ -681,7 +652,6 @@ def main():
         else:
             st.warning("🔴 MARKET CLOSED")
             st.info("📊 Showing historical analysis (last 5 days)")
-        
         st.markdown("---")
         st.markdown("### 📊 Signal Criteria for 90% Accuracy")
         st.caption("✅ EMA 9 > 21 > 50 (Strong Trend)")
@@ -696,7 +666,6 @@ def main():
     with col1:
         scan_btn = st.button("🔍 SCAN ALL 207 STOCKS - Find 90%+ Accuracy Signals", key="scan_btn", type="primary", use_container_width=True)
         auto_scan = st.checkbox("🔄 Auto-Scan Every 60 Seconds", key="auto_scan", value=False)
-    
     with col2:
         if st.button("🗑️ Clear All Signals", key="clear_btn", use_container_width=True):
             st.session_state.signals = []
@@ -722,7 +691,6 @@ def main():
     if st.session_state.last_scan:
         st.caption(f"🕐 Last scan: {st.session_state.last_scan.strftime('%H:%M:%S')} | Total stocks analyzed: {len(ALL_STOCKS)}")
     
-    # Auto-refresh timer display
     if auto_scan and st.session_state.last_scan:
         seconds_since = (datetime.now() - st.session_state.last_scan).seconds
         remaining = max(0, 60 - seconds_since)
@@ -731,25 +699,19 @@ def main():
     
     st.markdown("---")
     
-    # ========== DISPLAY SIGNALS ==========
+    # Display Signals
     if st.session_state.signals:
         buy_signals = [s for s in st.session_state.signals if s['signal'] == 'STRONG_BUY']
         sell_signals = [s for s in st.session_state.signals if s['signal'] == 'STRONG_SELL']
         
-        # Display BUY Signals
         if buy_signals:
             st.markdown("<h2>🟢 STRONG BUY SIGNALS (High Probability)</h2>", unsafe_allow_html=True)
             for idx, sig in enumerate(buy_signals[:10]):
-                if sig['probability'] >= 85:
-                    prob_class = "probability-high"
-                else:
-                    prob_class = "probability-high"
-                
                 st.markdown(f"""
                 <div class='signal-card strong-buy' id='buy_{idx}'>
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div><span class='badge-buy'>STRONG BUY</span></div>
-                        <div class='{prob_class}'>🎯 Accuracy: {sig['probability']:.0f}%</div>
+                        <div class='probability-high'>🎯 Accuracy: {sig['probability']:.0f}%</div>
                     </div>
                     <h2 style="margin: 15px 0;">📈 {sig['name']}</h2>
                     <div style="display: flex; gap: 20px; flex-wrap: wrap;">
@@ -772,7 +734,6 @@ def main():
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-                
                 with st.expander("🔍 Signal Analysis Details", expanded=False):
                     for reason in sig['reasons']:
                         st.write(f"• {reason}")
@@ -782,27 +743,18 @@ def main():
                         st.write("• 🎯 Smart Money: Liquidity Sweep Detected")
                     if sig['smc']['bos_up']:
                         st.write("• 📈 Smart Money: Break of Structure UP")
-                
                 with st.expander(f"📊 View {sig['name']} TradingView Chart", expanded=True):
-                    chart_html = get_tradingview_chart(sig['symbol'])
-                    st.components.v1.html(chart_html, height=550)
-                
+                    st.components.v1.html(get_tradingview_chart(sig['symbol']), height=550)
                 st.markdown("---")
         
-        # Display SELL Signals
         if sell_signals:
             st.markdown("<h2>🔴 STRONG SELL SIGNALS (High Probability)</h2>", unsafe_allow_html=True)
             for idx, sig in enumerate(sell_signals[:10]):
-                if sig['probability'] >= 85:
-                    prob_class = "probability-high"
-                else:
-                    prob_class = "probability-high"
-                
                 st.markdown(f"""
                 <div class='signal-card strong-sell' id='sell_{idx}'>
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div><span class='badge-sell'>STRONG SELL</span></div>
-                        <div class='{prob_class}'>🎯 Accuracy: {sig['probability']:.0f}%</div>
+                        <div class='probability-high'>🎯 Accuracy: {sig['probability']:.0f}%</div>
                     </div>
                     <h2 style="margin: 15px 0;">📉 {sig['name']}</h2>
                     <div style="display: flex; gap: 20px; flex-wrap: wrap;">
@@ -825,7 +777,6 @@ def main():
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-                
                 with st.expander("🔍 Signal Analysis Details", expanded=False):
                     for reason in sig['reasons']:
                         st.write(f"• {reason}")
@@ -835,11 +786,8 @@ def main():
                         st.write("• 🎯 Smart Money: Liquidity Sweep Detected")
                     if sig['smc']['bos_down']:
                         st.write("• 📉 Smart Money: Break of Structure DOWN")
-                
                 with st.expander(f"📊 View {sig['name']} TradingView Chart", expanded=True):
-                    chart_html = get_tradingview_chart(sig['symbol'])
-                    st.components.v1.html(chart_html, height=550)
-                
+                    st.components.v1.html(get_tradingview_chart(sig['symbol']), height=550)
                 st.markdown("---")
     
     else:
