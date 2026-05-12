@@ -62,7 +62,7 @@ def check_login():
 
 check_login()
 
-# ========== BLACK PROFESSIONAL CSS (same as before) ==========
+# ========== BLACK PROFESSIONAL CSS ==========
 st.markdown("""
 <style>
     .stApp { background-color: #050505; }
@@ -153,7 +153,7 @@ if "top_losers" not in st.session_state:
 if "market_trend" not in st.session_state:
     st.session_state.market_trend = "NEUTRAL"
 
-# ========== DHAN API FUNCTIONS (CORRECTED) ==========
+# ========== DHAN API FUNCTIONS (FIXED) ==========
 def get_dhan_headers():
     return {
         'Accept': 'application/json',
@@ -163,13 +163,13 @@ def get_dhan_headers():
     }
 
 def get_dhan_history(symbol, interval="5", days=7):
-    """Corrected Dhan API v2 historical data"""
+    """Corrected Dhan API v2 historical data - POST method + proper response parsing"""
     try:
         to_date = datetime.now()
         from_date = to_date - timedelta(days=days)
         
         url = "https://api.dhan.co/v2/charts/historical"
-        params = {
+        payload = {
             "symbol": symbol,
             "exchangeSegment": "NSE",
             "instrument": "EQUITY",
@@ -178,12 +178,14 @@ def get_dhan_history(symbol, interval="5", days=7):
             "interval": interval
         }
         headers = get_dhan_headers()
-        response = requests.get(url, headers=headers, params=params, timeout=10)
+        # ----- FIX 1: Use POST instead of GET -----
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
         
         if response.status_code == 200:
             data = response.json()
-            if 'data' in data and data['data']:
-                candles = data['data']
+            # ----- FIX 2: Correct response structure - data['data']['candles'] -----
+            if 'data' in data and 'candles' in data['data']:
+                candles = data['data']['candles']
                 df_data = []
                 for candle in candles:
                     df_data.append({
@@ -198,17 +200,19 @@ def get_dhan_history(symbol, interval="5", days=7):
                     df = pd.DataFrame(df_data)
                     df.set_index('timestamp', inplace=True)
                     return df
+            else:
+                # Optional: show what the response looks like for debugging
+                # st.warning(f"Unexpected response for {symbol}: {data}")
+                pass
         else:
-            # Optional debug (can be removed in production)
-            # st.warning(f"API Error {response.status_code} for {symbol}")
-            pass
+            # ----- FIX 3: Show actual error -----
+            st.error(f"⚠️ API Error {response.status_code} for {symbol}: {response.text[:200]}")
     except Exception as e:
-        # st.error(f"Exception for {symbol}: {str(e)}")
-        pass
+        st.error(f"❌ Exception for {symbol}: {str(e)}")
     return None
 
 def get_live_quote(symbol):
-    """Corrected Dhan API v2 live quote"""
+    """Corrected Dhan API v2 live quote with error display"""
     try:
         url = "https://api.dhan.co/v2/quote"
         params = {
@@ -226,11 +230,13 @@ def get_live_quote(symbol):
                 'change_percent': data.get('percentChange', 0),
                 'volume': data.get('totalTradedVolume', 0)
             }
-    except:
-        pass
+        else:
+            st.error(f"⚠️ Quote error {response.status_code} for {symbol}: {response.text[:100]}")
+    except Exception as e:
+        st.error(f"❌ Quote exception for {symbol}: {str(e)}")
     return None
 
-# ========== COMPLETE STOCKS LIST (M&M replaced with M_M) ==========
+# ========== COMPLETE STOCKS LIST (FIXED: M_M -> M&M) ==========
 ALL_STOCKS = [
     "360ONE", "ABB", "ABCAPITAL", "ADANIENSOL", "ADANIENT", "ADANIGREEN", "ADANIPORTS",
     "ALKEM", "AMBER", "AMBUJACEM", "ANGELONE", "APLAPOLLO", "APOLLOHOSP", "ASHOKLEY",
@@ -248,7 +254,8 @@ ALL_STOCKS = [
     "INFY", "INOXWIND", "IOC", "IREDA", "IRFC", "ITC", "JINDALSTEL", "JIOFIN",
     "JSWENERGY", "JSWSTEEL", "JUBLFOOD", "KALYANKJIL", "KAYNES", "KEI", "KFINTECH",
     "KOTAKBANK", "KPITTECH", "LAURUSLABS", "LICHSGFIN", "LICI", "LODHA", "LT", "LTF",
-    "LUPIN", "M_M", "MANAPPURAM", "MANKIND", "MARICO", "MARUTI", "MAXHEALTH",
+    "LUPIN", "M&M",   # <--- FIXED: replaced M_M with M&M
+    "MANAPPURAM", "MANKIND", "MARICO", "MARUTI", "MAXHEALTH",
     "MAZDOCK", "MCX", "MFSL", "MOTHERSON", "MPHASIS", "MUTHOOTFIN", "NATIONALUM",
     "NAUKRI", "NBCC", "NESTLEIND", "NHPC", "NMDC", "NTPC", "NUVAMA", "NYKAA",
     "OBEROIRLTY", "OFSS", "OIL", "ONGC", "PAGEIND", "PATANJALI", "PAYTM", "PERSISTENT",
@@ -263,7 +270,7 @@ ALL_STOCKS = [
     "WIPRO", "YESBANK", "ZYDUSLIFE"
 ]
 
-# ========== TECHNICAL INDICATORS (same as before) ==========
+# ========== TECHNICAL INDICATORS (NO CHANGE) ==========
 def calculate_ema(close, period):
     return close.ewm(span=period, adjust=False).mean()
 
@@ -566,8 +573,8 @@ def get_top_gainers_losers():
                     gainers.append(stock_data)
                 elif quote['change_percent'] < 0:
                     losers.append(stock_data)
-        except:
-            pass
+        except Exception as e:
+            st.error(f"Gainer/loser error for {symbol}: {e}")
         time.sleep(0.05)
     gainers.sort(key=lambda x: x['change_percent'], reverse=True)
     losers.sort(key=lambda x: x['change_percent'])
@@ -635,17 +642,17 @@ def scan_all_stocks():
                     signal['symbol'] = symbol
                     signal['entry_time'] = datetime.now().strftime("%H:%M:%S")
                     signals.append(signal)
-        except:
-            pass
-        time.sleep(0.02)
+        except Exception as e:
+            st.error(f"Scan error for {symbol}: {e}")
+        # Small delay to avoid rate limiting
+        time.sleep(0.05)
     progress_bar.empty()
     status_text.empty()
     signals.sort(key=lambda x: x['probability'], reverse=True)
     return signals
 
 def get_tradingview_chart(symbol, timeframe="5"):
-    # For M_M symbol, TradingView expects M&M, so replace back
-    tv_symbol = symbol.replace("M_M", "M&M")
+    # For M&M symbol, TradingView expects M&M, already correct now.
     return f"""
     <div style="border-radius: 15px; overflow: hidden; background: #0a0a0a; padding: 5px; margin-top: 10px; margin-bottom: 10px;">
         <div class="tradingview-widget-container" style="height:500px;">
@@ -655,7 +662,7 @@ def get_tradingview_chart(symbol, timeframe="5"):
             new TradingView.widget({{
                 "width": "100%",
                 "height": 500,
-                "symbol": "NSE:{tv_symbol}",
+                "symbol": "NSE:{symbol}",
                 "interval": "{timeframe}",
                 "timezone": "Asia/Kolkata",
                 "theme": "dark",
@@ -675,7 +682,7 @@ def get_tradingview_chart(symbol, timeframe="5"):
     </div>
     """
 
-# ========== MAIN APP (same structure, no changes needed except above) ==========
+# ========== MAIN APP ==========
 def main():
     st.markdown(f"<div style='text-align:right'><span class='api-status'>👤 Welcome {st.session_state.username}</span></div>", unsafe_allow_html=True)
     with st.sidebar:
