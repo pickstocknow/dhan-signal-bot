@@ -1,5 +1,4 @@
-fyers-apiv3
 streamlit
 pandas
 numpy
-websockets
+requests
