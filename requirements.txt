@@ -1,5 +1,5 @@
+dhanhq>=2.2.0
 streamlit
 pandas
 numpy
 requests
-dhanhq
