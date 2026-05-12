@@ -8,7 +8,7 @@ from dhanhq import dhanhq
 # ========== DHAN CREDENTIALS ==========
 DHAN_CLIENT_ID = "1103750176"
 # Access token से लीक को रोकने के लिए मैं यह हटा रहा हूँ। आपको इसे अपनी फ़ाइल में जरूर डालना है।
-DHAN_ACCESS_TOKEN = "YOUR_NEW_ACCESS_TOKEN_HERE"
+DHAN_ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzc4NjQyOTE3LCJpYXQiOjE3Nzg1NTY1MTcsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTAzNzUwMTc2In0.E709I8Hi0529OYvXDYvL_IOLTzPqaJnjXrTkCAicbgG5OrIhD13jRIQNpStTOxppZ6yYr3dxAVOPUA0jMw-QOg"
 
 # Initialize Dhan client
 dh = dhanhq(DHAN_CLIENT_ID, DHAN_ACCESS_TOKEN)
