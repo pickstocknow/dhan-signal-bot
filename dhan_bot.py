@@ -76,25 +76,29 @@ def get_dhan_headers():
         'client-id': DHAN_CLIENT_ID
     }
 
-def get_live_quote(symbol):
-    """Get live LTP and change using the correct /v2/marketfeed/ohlc endpoint (POST)"""
+def fetch_ohlc_batch(symbols_list):
+    """एक ही कॉल में कई स्टॉक्स का OHLC डेटा लें"""
     try:
         url = "https://api.dhan.co/v2/marketfeed/ohlc"
-        payload = [symbol]  # API expects a list of symbols
-        response = requests.post(url, headers=get_dhan_headers(), json=payload, timeout=5)
+        payload = symbols_list
+        response = requests.post(url, headers=get_dhan_headers(), json=payload, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            if isinstance(data, list) and len(data) > 0:
-                item = data[0]
-                return {
-                    'ltp': item.get('lastPrice', 0),
-                    'change': item.get('change', 0),
-                    'change_percent': item.get('changePercent', 0)
-                }
+            if isinstance(data, list):
+                result = {}
+                for idx, sym in enumerate(symbols_list):
+                    if idx < len(data):
+                        item = data[idx]
+                        result[sym] = {
+                            'ltp': item.get('lastPrice', 0),
+                            'change': item.get('change', 0),
+                            'change_percent': item.get('changePercent', 0)
+                        }
+                return result
         else:
-            st.error(f"Quote error {response.status_code} for {symbol}: {response.text[:200]}")
+            st.error(f"Batch error {response.status_code}: {response.text[:200]}")
     except Exception as e:
-        st.error(f"Quote exception {symbol}: {e}")
+        st.error(f"Batch exception: {e}")
     return None
 
 def get_dhan_history(symbol, interval="5", days=5):
@@ -313,28 +317,48 @@ def generate_signal(df, symbol=None):
 
 # ========== GAINERS, LOSERS, MARKET TREND ==========
 def get_top_gainers_losers():
-    gainers, losers = [], []
+    gainers = []
+    losers = []
     stocks = ["RELIANCE","TCS","HDFCBANK","INFY","ICICIBANK","SBIN","BHARTIARTL","KOTAKBANK","BAJFINANCE","ITC","LT","WIPRO","AXISBANK","HCLTECH"]
-    for sym in stocks:
-        q = get_live_quote(sym)
-        if q and q['change_percent'] != 0:
-            data = {'symbol': sym, 'price': q['ltp'], 'change': q['change'], 'change_percent': q['change_percent']}
-            if q['change_percent'] > 0: gainers.append(data)
-            else: losers.append(data)
-        time.sleep(0.05)
+    
+    # एक ही कॉल में सबका डेटा लें
+    quotes = fetch_ohlc_batch(stocks)
+    
+    if quotes:
+        for sym in stocks:
+            q = quotes.get(sym)
+            if q and q['change_percent'] != 0:
+                data = {'symbol': sym, 'price': q['ltp'], 'change': q['change'], 'change_percent': q['change_percent']}
+                if q['change_percent'] > 0:
+                    gainers.append(data)
+                else:
+                    losers.append(data)
+    
     gainers.sort(key=lambda x: x['change_percent'], reverse=True)
     losers.sort(key=lambda x: x['change_percent'])
     return gainers[:5], losers[:5]
 
 def detect_market_trend():
     bullish, bearish = 0, 0
-    for sym in ["RELIANCE","TCS","HDFCBANK","INFY","ICICIBANK","SBIN","BHARTIARTL"]:
-        q = get_live_quote(sym)
-        if q:
-            if q['change'] > 0: bullish += 1
-            else: bearish += 1
-    if bullish > bearish + 2: return "BULLISH", f"🟢 BULLISH ({bullish} up)"
-    if bearish > bullish + 2: return "BEARISH", f"🔴 BEARISH ({bearish} down)"
+    trend_stocks = ["RELIANCE","TCS","HDFCBANK","INFY","ICICIBANK","SBIN","BHARTIARTL"]
+    
+    quotes = fetch_ohlc_batch(trend_stocks)
+    
+    if quotes:
+        for sym in trend_stocks:
+            q = quotes.get(sym)
+            if q:
+                if q['change'] > 0:
+                    bullish += 1
+                else:
+                    bearish += 1
+    else:
+        return "NEUTRAL", "🟡 NEUTRAL (API fail)"
+    
+    if bullish > bearish + 2:
+        return "BULLISH", f"🟢 BULLISH ({bullish} up)"
+    if bearish > bullish + 2:
+        return "BEARISH", f"🔴 BEARISH ({bearish} down)"
     return "NEUTRAL", "🟡 NEUTRAL"
 
 def scan_all_stocks():
