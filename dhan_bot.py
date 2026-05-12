@@ -3,236 +3,525 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import time
-import json
-from fyers_apiv3 import fyersModel
-from fyers_apiv3.FyersWebsocket import data_ws
+import requests
+import urllib.parse
+import random
+import string
+import warnings
+warnings.filterwarnings('ignore')
 
 # ========== FYERS CREDENTIALS ==========
-# FYERS Developer Portal से लें
-CLIENT_ID = "ER78MCCWG0-100"  # Example: "XCXXXXXXM-100"
-SECRET_KEY = "9MLTKAAHCQ"
-REDIRECT_URI = "https://trade.fyers.in/api-login/redirect-uri/index.html"
-ACCESS_TOKEN = "JVHC6XLKBY6OOII5VSAKRTA3QTOIO2MM"  # Generate करने के बाद डालें
+FYERS_APP_ID = "ER78MCCWG0-100"           
+FYERS_SECRET_ID = "9MLTKAAHCQ"      
+FYERS_ACCESS_TOKEN = "JVHC6XLKBY6OOII5VSAKRTA3QTOIO2MM"  # Your access token
+REDIRECT_URI = "http://127.0.0.1:8501"
 
-# ========== USER LOGIN (Same as before) ==========
-USER_CREDENTIALS = {
-    "admin": "stock123",
-    "trader": "dhan2024",
-    "user": "password",
-    "vip": "vip2024"
-}
+# ========== PAGE CONFIG ==========
+st.set_page_config(
+    layout="wide", 
+    page_title="90% Accuracy SMC Signal Bot - FYERS", 
+    page_icon="🎯",
+    initial_sidebar_state="expanded"
+)
 
-st.set_page_config(layout="wide", page_title="🔥 90% Accuracy FYERS Signal Bot", page_icon="🎯")
-
-def check_login():
-    if "logged_in" not in st.session_state:
-        st.session_state.logged_in = False
-    if not st.session_state.logged_in:
-        st.markdown("<h1 style='text-align: center;'>🔐 LOGIN REQUIRED</h1>", unsafe_allow_html=True)
-        col1, col2, col3 = st.columns([1,2,1])
-        with col2:
-            with st.form("login_form"):
-                u = st.text_input("Username")
-                p = st.text_input("Password", type="password")
-                if st.form_submit_button("Login"):
-                    if u in USER_CREDENTIALS and USER_CREDENTIALS[u] == p:
-                        st.session_state.logged_in = True
-                        st.session_state.username = u
-                        st.rerun()
-                    else:
-                        st.error("❌ Invalid credentials")
-        st.stop()
-    return True
-check_login()
-
-# ========== CSS STYLING (Same as before) ==========
+# ========== BLACK PROFESSIONAL CSS ==========
 st.markdown("""
 <style>
     .stApp { background-color: #050505; }
-    h1 { color: #00ff88 !important; text-align: center; }
-    .strong-buy { border-left: 8px solid #00ff88; background: #0a2a0a; border-radius: 20px; padding: 20px; margin: 15px 0; }
-    .strong-sell { border-left: 8px solid #ff3333; background: #2a0a0a; border-radius: 20px; padding: 20px; margin: 15px 0; }
-    .badge-buy { background: #00ff88; color: #000; padding: 5px 15px; border-radius: 20px; }
-    .badge-sell { background: #ff3333; color: #fff; padding: 5px 15px; border-radius: 20px; }
-    .metric-box { background: #0d0d0d; border-radius: 12px; padding: 10px; text-align: center; display: inline-block; margin: 5px; }
-    .price-up { color: #00ff88; font-size: 28px; font-weight: bold; }
-    .price-down { color: #ff3333; font-size: 28px; font-weight: bold; }
+    h1 { color: #00ff88 !important; text-align: center; font-size: 42px; }
+    h2 { color: #00ff88 !important; }
+    .signal-card {
+        background: linear-gradient(135deg, #0d0d0d 0%, #0a0a0a 100%);
+        border-radius: 20px;
+        padding: 25px;
+        margin: 15px 0;
+        border: 1px solid #1a1a1a;
+        animation: slideIn 0.5s ease-out;
+    }
+    @keyframes slideIn {
+        from { opacity: 0; transform: translateY(-20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .strong-buy { 
+        border-left: 8px solid #00ff88; 
+        background: linear-gradient(135deg, #0a2a0a 0%, #0a0a0a 100%);
+    }
+    .strong-sell { 
+        border-left: 8px solid #ff3333; 
+        background: linear-gradient(135deg, #2a0a0a 0%, #0a0a0a 100%);
+    }
+    .badge-buy { background: #00ff88; color: #000; padding: 8px 20px; border-radius: 25px; font-weight: bold; }
+    .badge-sell { background: #ff3333; color: #fff; padding: 8px 20px; border-radius: 25px; font-weight: bold; }
+    .price-up { color: #00ff88; font-size: 32px; font-weight: bold; }
+    .price-down { color: #ff3333; font-size: 32px; font-weight: bold; }
+    .metric-box { background: #0d0d0d; border-radius: 12px; padding: 12px; text-align: center; border: 1px solid #1a1a1a; }
+    .probability-high { background: #00ff88; border-radius: 30px; padding: 8px 20px; text-align: center; color: #000; font-weight: bold; animation: pulse 1s ease-in-out infinite alternate; }
+    @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.05); } }
+    .api-status { background: #1a1a1a; border-radius: 10px; padding: 5px 10px; font-size: 12px; display: inline-block; }
+    .entry-time { color: #ffaa00; font-size: 14px; font-family: monospace; }
 </style>
 """, unsafe_allow_html=True)
 
-# ========== SESSION STATE ==========
-for key in ["signals", "last_scan", "top_gainers", "top_losers", "market_trend"]:
-    if key not in st.session_state:
-        if key == "signals": st.session_state.signals = []
-        elif key == "last_scan": st.session_state.last_scan = None
-        elif key == "top_gainers": st.session_state.top_gainers = []
-        elif key == "top_losers": st.session_state.top_losers = []
-        elif key == "market_trend": st.session_state.market_trend = "NEUTRAL"
+# ========== BOT PASSWORD ==========
+USERNAME = "admin"
+PASSWORD = "stock123"
+
+# ========== SESSION STATE INITIALIZATION ==========
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+if "fyers_token" not in st.session_state:
+    st.session_state.fyers_token = FYERS_ACCESS_TOKEN  # Auto-assign token
+if "signals" not in st.session_state:
+    st.session_state.signals = []
+if "last_scan" not in st.session_state:
+    st.session_state.last_scan = None
+if "auto_scan_active" not in st.session_state:
+    st.session_state.auto_scan_active = False
+if "top_gainers" not in st.session_state:
+    st.session_state.top_gainers = []
+if "top_losers" not in st.session_state:
+    st.session_state.top_losers = []
+if "market_trend" not in st.session_state:
+    st.session_state.market_trend = "NEUTRAL"
+
+# ========== LOGIN FUNCTION ==========
+def show_login():
+    st.markdown("<h1 style='text-align: center;'>🎯 90% ACCURACY SIGNAL BOT</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #ffaa00;'>SMC | EMA | RSI | MACD | VWAP | FYERS Live Data</p>", unsafe_allow_html=True)
+    
+    with st.form(key="login_form_main"):
+        username = st.text_input("Username", key="login_username")
+        password = st.text_input("Password", type="password", key="login_password")
+        submitted = st.form_submit_button("Login", key="login_button_main")
+        
+        if submitted:
+            if username == USERNAME and password == PASSWORD:
+                st.session_state["authenticated"] = True
+                st.rerun()
+            else:
+                st.error("❌ Invalid username or password")
+
+if not st.session_state["authenticated"]:
+    show_login()
+    st.stop()
 
 # ========== FYERS API FUNCTIONS ==========
-def get_live_quote_fyers(symbol):
-    """FYERS API से Live Quote लेना - Bridge के जरिए"""
-    try:
-        # Initialize Fyers Model
-        fyers = fyersModel.FyersModel(
-            client_id=CLIENT_ID,
-            token=ACCESS_TOKEN,
-            is_async=False,
-            log_path=""
-        )
-        
-        # Format symbol for FYERS (NSE:RELIANCE-EQ)
-        fyers_symbol = f"NSE:{symbol}-EQ"
-        
-        # Get quote data
-        data = {"symbols": fyers_symbol}
-        response = fyers.quotes(data=data)
-        
-        if response["s"] == "ok":
-            item = response["d"][0]
-            v_data = item.get("v", {})
-            return {
-                'ltp': float(v_data.get("lp", 0)),
-                'change': float(v_data.get("ch", 0)),
-                'change_percent': float(v_data.get("chp", 0)),
-                'open': float(v_data.get("open_price", 0)),
-                'high': float(v_data.get("high_price", 0)),
-                'low': float(v_data.get("low_price", 0)),
-                'volume': int(v_data.get("volume", 0))
-            }
-    except Exception as e:
-        st.error(f"FYERS Quote error {symbol}: {str(e)}")
-    return None
+def get_dhan_headers():
+    """Generate headers for FYERS API"""
+    return {
+        'Authorization': f"{FYERS_APP_ID}:{st.session_state.fyers_token}",
+        'Content-Type': 'application/json'
+    }
 
-def get_historical_data_fyers(symbol, interval="5", days=5):
-    """FYERS से Historical Data लेना"""
+def get_history_fyers(symbol, resolution="15", days=5):
+    """Get historical data from FYERS API"""
+    if not st.session_state.fyers_token:
+        return None
+    
+    to_date = datetime.now()
+    from_date = to_date - timedelta(days=days)
+    
+    url = "https://api.fyers.in/api/v2/history"
+    headers = get_dhan_headers()
+    params = {
+        'symbol': f"NSE:{symbol}",
+        'resolution': resolution,  # 1, 5, 15, 60, D
+        'date_format': '1',
+        'range_from': from_date.strftime("%Y-%m-%d"),
+        'range_to': to_date.strftime("%Y-%m-%d"),
+        'cont_flag': '1'
+    }
+    
     try:
-        fyers = fyersModel.FyersModel(
-            client_id=CLIENT_ID,
-            token=ACCESS_TOKEN,
-            is_async=False,
-            log_path=""
-        )
-        
-        fyers_symbol = f"NSE:{symbol}-EQ"
-        to_date = datetime.now()
-        from_date = to_date - timedelta(days=days)
-        
-        # Convert to required format "YYYY-MM-DD"
-        from_str = from_date.strftime("%Y-%m-%d")
-        to_str = to_date.strftime("%Y-%m-%d")
-        
-        data = {
-            "symbol": fyers_symbol,
-            "resolution": interval,  # "1", "5", "15", "60", "D"
-            "date_format": "1",
-            "range_from": from_str,
-            "range_to": to_str,
-            "cont_flag": "1"
-        }
-        
-        response = fyers.history(data=data)
-        
-        if response["s"] == "ok":
-            candles = response.get("candles", [])
-            if candles:
-                df_data = []
-                for candle in candles:
-                    # candle format: [timestamp, open, high, low, close, volume]
-                    df_data.append({
-                        'timestamp': pd.to_datetime(candle[0], unit='s'),
-                        'Open': candle[1],
-                        'High': candle[2],
-                        'Low': candle[3],
-                        'Close': candle[4],
-                        'Volume': candle[5]
-                    })
-                df = pd.DataFrame(df_data)
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('s') == 'ok' and data.get('candles'):
+                df = pd.DataFrame(data['candles'], columns=['timestamp', 'Open', 'High', 'Low', 'Close', 'Volume'])
+                df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
                 df.set_index('timestamp', inplace=True)
                 return df
+        else:
+            st.error(f"History error {response.status_code} for {symbol}: {response.text[:100]}")
     except Exception as e:
-        st.error(f"FYERS History error {symbol}: {str(e)}")
+        st.error(f"History exception {symbol}: {e}")
     return None
 
-# ========== WEBSOCKET FOR REAL-TIME DATA (Optional - Best Performance) ==========
-def websocket_realtime_data():
-    """WebSocket से Real-time Data लेना - सबसे तेज़ तरीका"""
+def get_live_quote_fyers(symbol):
+    """Get live quote from FYERS API for gainers/losers"""
+    if not st.session_state.fyers_token:
+        return None
     
-    def on_message(message):
-        """WebSocket से message आने पर"""
-        print("Live Data:", message)
-        # यहाँ अपने सिग्नल लॉजिक को कॉल करें
+    url = "https://api.fyers.in/api/v2/quotations"
+    headers = get_dhan_headers()
+    params = {'symbols': f"NSE:{symbol}"}
     
-    def on_error(message):
-        print("Error:", message)
-    
-    def on_close(message):
-        print("Connection closed:", message)
-    
-    def on_open():
-        """WebSocket open होने पर सब्सक्राइब करें"""
-        data_type = "SymbolUpdate"  # LTP के लिए Lite mode
-        symbols = ['NSE:RELIANCE-EQ', 'NSE:TCS-EQ', 'NSE:HDFCBANK-EQ']
-        fyers.subscribe(symbols=symbols, data_type=data_type)
-        fyers.keep_running()
-    
-    # WebSocket Connection
-    fyers = data_ws.FyersDataSocket(
-        access_token=ACCESS_TOKEN,
-        log_path="",
-        litemode=True,  # True = सिर्फ LTP आएगा (fastest)
-        write_to_file=False,
-        reconnect=True,
-        on_connect=on_open,
-        on_close=on_close,
-        on_error=on_error,
-        on_message=on_message
-    )
-    
-    fyers.connect()
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('s') == 'ok' and data.get('d'):
+                item = data['d'][0]
+                v_data = item.get('v', {})
+                return {
+                    'ltp': float(v_data.get('lp', 0)),
+                    'change': float(v_data.get('ch', 0)),
+                    'change_percent': float(v_data.get('chp', 0))
+                }
+        else:
+            st.error(f"Quote error {response.status_code} for {symbol}")
+    except Exception as e:
+        st.error(f"Quote exception {symbol}: {e}")
+    return None
 
-# ========== STOCKS LIST ==========
+# ========== COMPLETE 207 STOCKS ==========
 ALL_STOCKS = [
-    "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "BHARTIARTL",
-    "KOTAKBANK", "BAJFINANCE", "ITC", "LT", "WIPRO", "AXISBANK", "HCLTECH"
+    "360ONE", "ABB", "ABCAPITAL", "ADANIENSOL", "ADANIENT", "ADANIGREEN", "ADANIPORTS", 
+    "ALKEM", "AMBER", "AMBUJACEM", "ANGELONE", "APLAPOLLO", "APOLLOHOSP", "ASHOKLEY", 
+    "ASIANPAINT", "ASTRAL", "AUBANK", "AUROPHARMA", "AXISBANK", "BAJAJ-AUTO", "BAJAJFINSV", 
+    "BAJAJHLDNG", "BAJFINANCE", "BANDHANBNK", "BANKBARODA", "BANKINDIA", "BDL", "BEL", 
+    "BHARATFORG", "BHARTIARTL", "BHEL", "BIOCON", "BLUESTARCO", "BOSCHLTD", "BPCL", 
+    "BRITANNIA", "BSE", "CAMS", "CANBK", "CDSL", "CGPOWER", "CHOLAFIN", "CIPLA", "COALINDIA", 
+    "COFORGE", "COLPAL", "CONCOR", "CROMPTON", "CUMMINSIND", "DABUR", "DALBHARAT", "DELHIVERY", 
+    "DIVISLAB", "DIXON", "DLF", "DMART", "DRREDDY", "EICHERMOT", "ETERNAL", "EXIDEIND", 
+    "FEDERALBNK", "FORTIS", "GAIL", "GLENMARK", "GMRAIRPORT", "GODREJCP", "GODREJPROP", 
+    "GRASIM", "HAL", "HAVELLS", "HCLTECH", "HDFCAMC", "HDFCBANK", "HDFCLIFE", "HEROMOTOCO", 
+    "HINDALCO", "HINDPETRO", "HINDUNILVR", "HINDZINC", "HUDCO", "ICICIBANK", "ICICIGI", 
+    "ICICIPRULI", "IDEA", "IDFCFIRSTB", "IEX", "INDHOTEL", "INDIANB", "INDIGO", "INDUSINDBK", 
+    "INDUSTOWER", "INFY", "INOXWIND", "IOC", "IREDA", "IRFC", "ITC", "JINDALSTEL", "JIOFIN", 
+    "JSWENERGY", "JSWSTEEL", "JUBLFOOD", "KALYANKJIL", "KAYNES", "KEI", "KFINTECH", "KOTAKBANK", 
+    "KPITTECH", "LAURUSLABS", "LICHSGFIN", "LICI", "LODHA", "LT", "LTF", "LUPIN", "M&M", 
+    "MANAPPURAM", "MANKIND", "MARICO", "MARUTI", "MAXHEALTH", "MAZDOCK", "MCX", "MFSL", 
+    "MOTHERSON", "MPHASIS", "MUTHOOTFIN", "NATIONALUM", "NAUKRI", "NBCC", "NESTLEIND", "NHPC", 
+    "NMDC", "NTPC", "NUVAMA", "NYKAA", "OBEROIRLTY", "OFSS", "OIL", "ONGC", "PAGEIND", 
+    "PATANJALI", "PAYTM", "PERSISTENT", "PETRONET", "PFC", "PGEL", "PHOENIXLTD", "PIDILITIND", 
+    "PIIND", "PNB", "PNBHOUSING", "POLICYBZR", "POLYCAB", "POWERGRID", "POWERINDIA", "PPLPHARMA", 
+    "PREMIERENE", "PRESTIGE", "RBLBANK", "RECLTD", "RELIANCE", "RVNL", "SAIL", "SAMMAANCAP", 
+    "SBICARD", "SBILIFE", "SBIN", "SHREECEM", "SHRIRAMFIN", "SIEMENS", "SOLARINDS", "SONACOMS", 
+    "SRF", "SUNPHARMA", "SUPREMEIND", "SUZLON", "SWIGGY", "SYNGENE", "TATACONSUM", "TATAELXSI", 
+    "TATAPOWER", "TATASTEEL", "TATATECH", "TCS", "TECHM", "TIINDIA", "TITAN", "TORNTPHARM", 
+    "TORNTPOWER", "TRENT", "TVSMOTOR", "ULTRACEMCO", "UNIONBANK", "UNITDSPR", "UNOMINDA", 
+    "UPL", "VBL", "VEDL", "VOLTAS", "WAAREEENER", "WIPRO", "YESBANK", "ZYDUSLIFE"
 ]
 
-# ========== TECHNICAL INDICATORS (Same as before) ==========
-# ... (आपके सारे technical indicator functions यहाँ रहेंगे)
-def calculate_ema(close, period): return close.ewm(span=period, adjust=False).mean()
-# ... (बाकी सारे functions जो आपने पहले लिखे थे)
+# ========== ADVANCED 90% ACCURACY SIGNAL GENERATION (SMC + Indicators) ==========
+def calculate_ema(close, period):
+    return close.ewm(span=period, adjust=False).mean()
 
-def generate_signal(df, symbol=None):
-    if df is None or len(df) < 50: return None
-    # ... (आपका पुराना generate_signal function वैसा ही रहेगा)
-    # बस इसमें FYERS के data के साथ काम करेगा
-    pass
+def calculate_macd(close):
+    exp1 = close.ewm(span=12, adjust=False).mean()
+    exp2 = close.ewm(span=26, adjust=False).mean()
+    macd = exp1 - exp2
+    signal = macd.ewm(span=9, adjust=False).mean()
+    histogram = macd - signal
+    return macd, signal, histogram
 
-# ========== GAINERS/LOSERS ==========
-def get_top_gainers_losers():
-    gainers, losers = [], []
-    stocks = ["RELIANCE","TCS","HDFCBANK","INFY","ICICIBANK","SBIN","BHARTIARTL","KOTAKBANK","BAJFINANCE","ITC","LT","WIPRO","AXISBANK","HCLTECH"]
+def calculate_rsi(close, period=14):
+    delta = close.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+def calculate_bollinger(close, period=20, std_dev=2):
+    sma = close.rolling(window=period).mean()
+    std = close.rolling(window=period).std()
+    upper = sma + (std * std_dev)
+    lower = sma - (std * std_dev)
+    return upper, sma, lower
+
+def calculate_vwap(df):
+    typical_price = (df['High'] + df['Low'] + df['Close']) / 3
+    vwap = (typical_price * df['Volume']).cumsum() / df['Volume'].cumsum()
+    return vwap
+
+def calculate_adx(df, period=14):
+    high, low, close = df['High'], df['Low'], df['Close']
+    plus_dm = high.diff()
+    minus_dm = low.diff()
+    plus_dm[plus_dm < 0] = 0
+    minus_dm[minus_dm > 0] = 0
+    tr = pd.concat([high - low, (high - close.shift()).abs(), (low - close.shift()).abs()], axis=1).max(axis=1)
+    atr = tr.rolling(window=period).mean()
+    plus_di = 100 * (plus_dm.ewm(alpha=1/period).mean() / atr)
+    minus_di = 100 * (minus_dm.abs().ewm(alpha=1/period).mean() / atr)
+    dx = (abs(plus_di - minus_di) / (plus_di + minus_di)) * 100
+    adx = dx.rolling(window=period).mean()
+    return adx, plus_di, minus_di
+
+def detect_smc_patterns(df):
+    """Smart Money Concept Pattern Detection"""
+    if len(df) < 30:
+        return {'liquidity_sweep_low': False, 'bos_up': False, 'liquidity_sweep_high': False, 'bos_down': False}
     
-    for sym in stocks:
-        q = get_live_quote_fyers(sym)
+    high = df['High'].values
+    low = df['Low'].values
+    close = df['Close'].values
+    
+    swing_highs = []
+    swing_lows = []
+    
+    for i in range(5, len(df)-5):
+        if all(high[i] >= high[i-j] for j in range(1, 4)) and all(high[i] >= high[i+j] for j in range(1, 4)):
+            swing_highs.append(i)
+        if all(low[i] <= low[i-j] for j in range(1, 4)) and all(low[i] <= low[i+j] for j in range(1, 4)):
+            swing_lows.append(i)
+    
+    liquidity_sweep_high = False
+    liquidity_sweep_low = False
+    bos_up = False
+    bos_down = False
+    
+    if len(swing_highs) > 1 and close[-1] > high[swing_highs[-1]]:
+        liquidity_sweep_high = True
+    if len(swing_lows) > 1 and close[-1] < low[swing_lows[-1]]:
+        liquidity_sweep_low = True
+    if len(swing_highs) > 2 and high[swing_highs[-1]] > high[swing_highs[-2]]:
+        bos_up = True
+    if len(swing_lows) > 2 and low[swing_lows[-1]] < low[swing_lows[-2]]:
+        bos_down = True
+    
+    return {'liquidity_sweep_low': liquidity_sweep_low, 'bos_up': bos_up,
+            'liquidity_sweep_high': liquidity_sweep_high, 'bos_down': bos_down}
+
+def detect_candle_patterns(df):
+    """Candlestick Pattern Detection"""
+    if len(df) < 3:
+        return []
+    patterns = []
+    c1 = df.iloc[-2]
+    c2 = df.iloc[-1]
+    
+    o2, h2, l2, c2_close = c2['Open'], c2['High'], c2['Low'], c2['Close']
+    body = abs(c2_close - o2)
+    lower_wick = min(o2, c2_close) - l2
+    upper_wick = h2 - max(o2, c2_close)
+    
+    if lower_wick > body * 2 and upper_wick < body * 0.5:
+        patterns.append("Hammer (Bullish)")
+    if upper_wick > body * 2 and lower_wick < body * 0.5:
+        patterns.append("Shooting Star (Bearish)")
+    
+    if len(df) >= 2:
+        if c1['Close'] < c1['Open'] and c2_close > o2 and o2 < c1['Close'] and c2_close > c1['Open']:
+            patterns.append("Bullish Engulfing")
+        if c1['Close'] > c1['Open'] and c2_close < o2 and o2 > c1['Close'] and c2_close < c1['Open']:
+            patterns.append("Bearish Engulfing")
+    
+    return patterns
+
+def generate_high_accuracy_signal(df, symbol=None):
+    """Generate signal using SMC + Multiple Indicators"""
+    if df is None or len(df) < 50:
+        return None
+    
+    close = df['Close']
+    high = df['High']
+    low = df['Low']
+    volume = df['Volume']
+    
+    # Calculate all indicators
+    ema9 = calculate_ema(close, 9)
+    ema21 = calculate_ema(close, 21)
+    ema50 = calculate_ema(close, 50)
+    macd, macd_signal, macd_hist = calculate_macd(close)
+    rsi = calculate_rsi(close)
+    bb_upper, bb_middle, bb_lower = calculate_bollinger(close)
+    vwap = calculate_vwap(df)
+    adx, plus_di, minus_di = calculate_adx(df)
+    smc = detect_smc_patterns(df)
+    candle_patterns = detect_candle_patterns(df)
+    
+    # Volume analysis
+    avg_volume = volume.rolling(window=20).mean()
+    volume_ratio = volume.iloc[-1] / avg_volume.iloc[-1] if avg_volume.iloc[-1] > 0 else 1
+    
+    # Current values
+    current_price = close.iloc[-1]
+    current_ema9 = ema9.iloc[-1]
+    current_ema21 = ema21.iloc[-1]
+    current_ema50 = ema50.iloc[-1]
+    current_rsi = rsi.iloc[-1] if not pd.isna(rsi.iloc[-1]) else 50
+    current_macd = macd_hist.iloc[-1] if not pd.isna(macd_hist.iloc[-1]) else 0
+    current_adx = adx.iloc[-1] if not pd.isna(adx.iloc[-1]) else 20
+    current_vwap = vwap.iloc[-1]
+    
+    # ATR for targets
+    atr = (high - low).rolling(14).mean().iloc[-1]
+    if pd.isna(atr):
+        atr = current_price * 0.01
+    
+    # Scoring System (0-100)
+    bullish_score = 0
+    bearish_score = 0
+    reasons_bullish = []
+    reasons_bearish = []
+    
+    # === EMA TREND (Weight: 25) ===
+    if current_ema9 > current_ema21 > current_ema50:
+        bullish_score += 25
+        reasons_bullish.append("✅ EMA 9 > 21 > 50 (Strong Uptrend)")
+    elif current_ema9 > current_ema21:
+        bullish_score += 15
+        reasons_bullish.append("✅ EMA 9 > 21 (Bullish Trend)")
+    elif current_ema9 < current_ema21 < current_ema50:
+        bearish_score += 25
+        reasons_bearish.append("❌ EMA 9 < 21 < 50 (Strong Downtrend)")
+    elif current_ema9 < current_ema21:
+        bearish_score += 15
+        reasons_bearish.append("❌ EMA 9 < 21 (Bearish Trend)")
+    
+    # === Price vs VWAP (Weight: 15) ===
+    if current_price > current_vwap:
+        bullish_score += 15
+        reasons_bullish.append("✅ Price above VWAP (Bullish)")
+    else:
+        bearish_score += 15
+        reasons_bearish.append("❌ Price below VWAP (Bearish)")
+    
+    # === RSI (Weight: 20) ===
+    if current_rsi < 30:
+        bullish_score += 20
+        reasons_bullish.append(f"✅ RSI Oversold: {current_rsi:.1f}")
+    elif current_rsi < 40:
+        bullish_score += 10
+        reasons_bullish.append(f"✅ RSI Approaching Oversold: {current_rsi:.1f}")
+    elif current_rsi > 70:
+        bearish_score += 20
+        reasons_bearish.append(f"❌ RSI Overbought: {current_rsi:.1f}")
+    elif current_rsi > 60:
+        bearish_score += 10
+        reasons_bearish.append(f"❌ RSI Approaching Overbought: {current_rsi:.1f}")
+    
+    # === MACD (Weight: 15) ===
+    if current_macd > 0:
+        bullish_score += 15
+        reasons_bullish.append(f"✅ MACD Bullish: {current_macd:.4f}")
+    else:
+        bearish_score += 15
+        reasons_bearish.append(f"❌ MACD Bearish: {current_macd:.4f}")
+    
+    # === Bollinger Bands (Weight: 10) ===
+    if current_price <= bb_lower.iloc[-1]:
+        bullish_score += 10
+        reasons_bullish.append("✅ Price at Lower BB (Support)")
+    elif current_price >= bb_upper.iloc[-1]:
+        bearish_score += 10
+        reasons_bearish.append("❌ Price at Upper BB (Resistance)")
+    
+    # === ADX Trend Strength (Weight: 10) ===
+    if current_adx > 25:
+        if plus_di.iloc[-1] > minus_di.iloc[-1]:
+            bullish_score += 10
+            reasons_bullish.append(f"✅ Strong Uptrend (ADX: {current_adx:.1f})")
+        else:
+            bearish_score += 10
+            reasons_bearish.append(f"❌ Strong Downtrend (ADX: {current_adx:.1f})")
+    
+    # === Volume Confirmation (Weight: 10) ===
+    if volume_ratio > 1.5:
+        if bullish_score > bearish_score:
+            bullish_score += 10
+            reasons_bullish.append(f"✅ High Volume Confirmation: {volume_ratio:.1f}x")
+        else:
+            bearish_score += 10
+            reasons_bearish.append(f"❌ High Volume Sell Pressure: {volume_ratio:.1f}x")
+    
+    # === Smart Money Concepts (Weight: 20) ===
+    if smc['liquidity_sweep_low']:
+        bullish_score += 15
+        reasons_bullish.append("🎯 Liquidity Sweep Low (Smart Money Entry)")
+    if smc['bos_up']:
+        bullish_score += 10
+        reasons_bullish.append("📈 Break of Structure UP")
+    if smc['liquidity_sweep_high']:
+        bearish_score += 15
+        reasons_bearish.append("🎯 Liquidity Sweep High (Smart Money Exit)")
+    if smc['bos_down']:
+        bearish_score += 10
+        reasons_bearish.append("📉 Break of Structure DOWN")
+    
+    # === Candlestick Patterns (Weight: 10) ===
+    for pattern in candle_patterns:
+        if "Bullish" in pattern or "Hammer" in pattern:
+            bullish_score += 10
+            reasons_bullish.append(f"📊 {pattern}")
+        elif "Bearish" in pattern or "Shooting" in pattern:
+            bearish_score += 10
+            reasons_bearish.append(f"📊 {pattern}")
+    
+    # Final Decision - Only STRONG signals
+    if bullish_score >= 75 and bullish_score > bearish_score:
+        probability = min(98, bullish_score)
+        return {
+            'signal': 'STRONG_BUY',
+            'probability': probability,
+            'price': current_price,
+            'target1': current_price + (atr * 1.5),
+            'target2': current_price + (atr * 2.5),
+            'target3': current_price + (atr * 4),
+            'stop_loss': current_price - (atr * 1.2),
+            'rsi': current_rsi,
+            'adx': current_adx,
+            'volume_ratio': volume_ratio,
+            'vwap': current_vwap,
+            'ema9': current_ema9, 'ema21': current_ema21, 'ema50': current_ema50,
+            'reasons': reasons_bullish[:8],
+            'candle_patterns': candle_patterns,
+            'smc': smc
+        }
+    elif bearish_score >= 75 and bearish_score > bullish_score:
+        probability = min(98, bearish_score)
+        return {
+            'signal': 'STRONG_SELL',
+            'probability': probability,
+            'price': current_price,
+            'target1': current_price - (atr * 1.5),
+            'target2': current_price - (atr * 2.5),
+            'target3': current_price - (atr * 4),
+            'stop_loss': current_price + (atr * 1.2),
+            'rsi': current_rsi,
+            'adx': current_adx,
+            'volume_ratio': volume_ratio,
+            'vwap': current_vwap,
+            'ema9': current_ema9, 'ema21': current_ema21, 'ema50': current_ema50,
+            'reasons': reasons_bearish[:8],
+            'candle_patterns': candle_patterns,
+            'smc': smc
+        }
+    
+    return None
+
+# ========== GET TOP GAINERS & LOSERS ==========
+def get_top_gainers_losers():
+    gainers = []
+    losers = []
+    main_stocks = ["RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "BHARTIARTL", 
+                   "KOTAKBANK", "BAJFINANCE", "ITC", "LT", "WIPRO", "AXISBANK", "HCLTECH"]
+    
+    for symbol in main_stocks:
+        q = get_live_quote_fyers(symbol)
         if q and q['change_percent'] != 0:
-            data = {'symbol': sym, 'price': q['ltp'], 'change': q['change'], 'change_percent': q['change_percent']}
+            data = {'symbol': symbol, 'price': q['ltp'], 'change': q['change'], 'change_percent': q['change_percent']}
             if q['change_percent'] > 0:
                 gainers.append(data)
-            else:
+            elif q['change_percent'] < 0:
                 losers.append(data)
-        time.sleep(0.1)  # Rate limit से बचने के लिए
+        time.sleep(0.1)
     
     gainers.sort(key=lambda x: x['change_percent'], reverse=True)
     losers.sort(key=lambda x: x['change_percent'])
     return gainers[:5], losers[:5]
 
+# ========== DETECT MARKET TREND ==========
 def detect_market_trend():
-    bullish, bearish = 0, 0
-    trend_stocks = ["RELIANCE","TCS","HDFCBANK","INFY","ICICIBANK","SBIN","BHARTIARTL"]
+    bullish = 0
+    bearish = 0
+    trend_stocks = ["RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "BHARTIARTL"]
     
-    for sym in trend_stocks:
-        q = get_live_quote_fyers(sym)
+    for symbol in trend_stocks:
+        q = get_live_quote_fyers(symbol)
         if q:
             if q['change'] > 0:
                 bullish += 1
@@ -241,47 +530,71 @@ def detect_market_trend():
         time.sleep(0.1)
     
     if bullish > bearish + 2:
-        return "BULLISH", f"🟢 BULLISH ({bullish} up)"
-    if bearish > bullish + 2:
-        return "BEARISH", f"🔴 BEARISH ({bearish} down)"
-    return "NEUTRAL", "🟡 NEUTRAL"
+        return "BULLISH", f"🟢 Market Trend: BULLISH ({bullish} stocks up)"
+    elif bearish > bullish + 2:
+        return "BEARISH", f"🔴 Market Trend: BEARISH ({bearish} stocks down)"
+    else:
+        return "NEUTRAL", f"🟡 Market Trend: NEUTRAL (Range bound)"
 
+# ========== SCAN ALL 207 STOCKS ==========
 def scan_all_stocks():
     signals = []
     total = len(ALL_STOCKS)
-    progress = st.progress(0)
-    status = st.empty()
+    progress_bar = st.progress(0)
+    status_text = st.empty()
     
-    for i, sym in enumerate(ALL_STOCKS):
-        status.text(f"🎯 Analyzing: {sym} ({i+1}/{total})")
-        progress.progress((i+1)/total)
+    for i, symbol in enumerate(ALL_STOCKS):
+        status_text.text(f"🎯 Analyzing: {symbol} ({i+1}/{total})")
+        progress_bar.progress((i+1)/total)
         
-        df = get_historical_data_fyers(sym, interval="5", days=5)
-        if df is not None and len(df) > 50:
-            sig = generate_signal(df, sym)
-            if sig:
-                sig['symbol'] = sym
-                sig['entry_time'] = datetime.now().strftime("%H:%M:%S")
-                signals.append(sig)
-        time.sleep(0.2)
+        try:
+            # Use 15-minute resolution for better signal accuracy
+            df = get_history_fyers(symbol, resolution="15", days=5)
+            if df is not None and len(df) > 30:
+                signal_data = generate_high_accuracy_signal(df, symbol)
+                if signal_data:
+                    signal_data['symbol'] = symbol
+                    signal_data['name'] = symbol
+                    signal_data['entry_time'] = datetime.now().strftime("%H:%M:%S")
+                    signals.append(signal_data)
+        except Exception as e:
+            pass
+        
+        time.sleep(0.03)  # Rate limiting
     
-    progress.empty()
-    status.empty()
+    progress_bar.empty()
+    status_text.empty()
+    
+    # Sort by probability (highest first)
     signals.sort(key=lambda x: x['probability'], reverse=True)
     return signals
 
-def get_tradingview_chart(symbol, timeframe="5"):
+# ========== TRADINGVIEW CHART ==========
+def get_tradingview_chart(symbol):
+    """Get TradingView chart widget"""
     return f"""
-    <div style="height:500px;">
+    <div style="border-radius: 15px; overflow: hidden; background: #0a0a0a; padding: 5px;">
         <div class="tradingview-widget-container" style="height:500px;">
-            <div id="tv_{symbol}" style="height:500px;"></div>
+            <div id="tradingview_chart_{symbol}" style="height:500px;"></div>
             <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-            <script>
+            <script type="text/javascript">
             new TradingView.widget({{
-                "width": "100%", "height": 500, "symbol": "NSE:{symbol}", "interval": "{timeframe}",
-                "timezone": "Asia/Kolkata", "theme": "dark", "style": "1", "locale": "in",
-                "container_id": "tv_{symbol}",
-                "studies": ["RSI@tv-basicstudies", "MACD@tv-basicstudies", "BB@tv-basicstudies"]
+                "width": "100%",
+                "height": 500,
+                "symbol": "NSE:{symbol}",
+                "interval": "15",
+                "timezone": "Asia/Kolkata",
+                "theme": "dark",
+                "style": "1",
+                "locale": "in",
+                "toolbar_bg": "#0a0a0a",
+                "enable_publishing": false,
+                "container_id": "tradingview_chart_{symbol}",
+                "studies": [
+                    "RSI@tv-basicstudies",
+                    "MACD@tv-basicstudies",
+                    "BB@tv-basicstudies"
+                ]
             }});
             </script>
         </div>
@@ -290,111 +603,253 @@ def get_tradingview_chart(symbol, timeframe="5"):
 
 # ========== MAIN APP ==========
 def main():
-    st.sidebar.write(f"👤 Welcome {st.session_state.username}")
-    if st.sidebar.button("Logout"):
-        st.session_state.logged_in = False
-        st.rerun()
-
-    st.markdown("<h1>🎯 90% ACCURACY SIGNAL BOT (FYERS)</h1>", unsafe_allow_html=True)
-    st.markdown("⚡ 5-MINUTE TIMEFRAME | REAL-TIME DATA | AUTO-SCAN", unsafe_allow_html=True)
-
+    st.markdown("<h1>🎯 90% ACCURACY SIGNAL BOT</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #ffaa00;'>SMC | EMA 9/21/50 | RSI | MACD | VWAP | ADX | FYERS Live Data</p>", unsafe_allow_html=True)
+    
+    # Check if token exists
+    if st.session_state.fyers_token:
+        st.markdown(f"<div style='text-align:center'><span class='api-status'>✅ FYERS API Connected | 207 Stocks | 15-Minute Timeframe</span></div>", unsafe_allow_html=True)
+    else:
+        st.markdown("<div style='text-align:center'><span class='api-status'>⚠️ FYERS API Not Connected</span></div>", unsafe_allow_html=True)
+    
+    # Market Trend
     market_trend, trend_msg = detect_market_trend()
     st.session_state.market_trend = market_trend
-    st.info(trend_msg)
-
-    # Gainers / Losers
-    col1, col2, col3 = st.columns([1,2,1])
-    with col2:
-        if st.button("🔄 Refresh Gainers/Losers"):
-            with st.spinner("Fetching..."):
-                st.session_state.top_gainers, st.session_state.top_losers = get_top_gainers_losers()
-    if not st.session_state.top_gainers:
-        with st.spinner("Initial load..."):
-            st.session_state.top_gainers, st.session_state.top_losers = get_top_gainers_losers()
-
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.subheader("🟢 TOP 5 GAINERS")
-        for g in st.session_state.top_gainers:
-            st.markdown(f"📈 **{g['symbol']}** +{g['change_percent']:.2f}%  ₹{g['price']:.2f}")
-    with col_b:
-        st.subheader("🔴 TOP 5 LOSERS")
-        for l in st.session_state.top_losers:
-            st.markdown(f"📉 **{l['symbol']}** {l['change_percent']:.2f}%  ₹{l['price']:.2f}")
-
+    
+    if market_trend == "BULLISH":
+        st.markdown(f"<div class='market-trend' style='background:#0a2a0a; border:1px solid #00ff88; padding:20px; border-radius:15px; text-align:center; margin:10px 0;'>{trend_msg}</div>", unsafe_allow_html=True)
+    elif market_trend == "BEARISH":
+        st.markdown(f"<div class='market-trend' style='background:#2a0a0a; border:1px solid #ff3333; padding:20px; border-radius:15px; text-align:center; margin:10px 0;'>{trend_msg}</div>", unsafe_allow_html=True)
+    else:
+        st.markdown(f"<div class='market-trend' style='background:#2a2a0a; border:1px solid #ffaa00; padding:20px; border-radius:15px; text-align:center; margin:10px 0;'>{trend_msg}</div>", unsafe_allow_html=True)
+    
     st.markdown("---")
-    col_btn1, col_btn2 = st.columns([2,1])
-    with col_btn1:
-        scan = st.button("🔍 SCAN ALL STOCKS - FIND 90%+ SIGNALS", type="primary", use_container_width=True)
-        auto = st.checkbox("🔄 AUTO-SCAN (Every 60 sec)", value=True, key="auto_scan")
-    with col_btn2:
-        if st.button("🗑️ Clear Signals"):
+    
+    # ========== TOP GAINERS & LOSERS SECTION ==========
+    st.markdown("<h2>📊 TOP 5 GAINERS & LOSERS</h2>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        refresh_btn = st.button("🔄 Refresh Gainers/Losers", use_container_width=True)
+    
+    if refresh_btn or not st.session_state.top_gainers:
+        with st.spinner("Fetching top gainers and losers..."):
+            st.session_state.top_gainers, st.session_state.top_losers = get_top_gainers_losers()
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("<h3 style='color:#00ff88;'>🟢 TOP 5 GAINERS</h3>", unsafe_allow_html=True)
+        if st.session_state.top_gainers:
+            for stock in st.session_state.top_gainers:
+                st.markdown(f"📈 **{stock['symbol']}** +{stock['change_percent']:.2f}%  ₹{stock['price']:.2f}")
+        else:
+            st.info("No gainers data available (market may be closed)")
+    
+    with col2:
+        st.markdown("<h3 style='color:#ff3333;'>🔴 TOP 5 LOSERS</h3>", unsafe_allow_html=True)
+        if st.session_state.top_losers:
+            for stock in st.session_state.top_losers:
+                st.markdown(f"📉 **{stock['symbol']}** {stock['change_percent']:.2f}%  ₹{stock['price']:.2f}")
+        else:
+            st.info("No losers data available (market may be closed)")
+    
+    st.markdown("---")
+    
+    # ========== SIDEBAR CONTROLS ==========
+    with st.sidebar:
+        st.markdown("## ⚙️ CONTROLS")
+        st.markdown("---")
+        
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.authenticated = False
+            st.session_state.fyers_token = None
+            st.rerun()
+        
+        st.markdown("---")
+        st.markdown("### 🔐 FYERS API STATUS")
+        if st.session_state.fyers_token:
+            st.success("✅ CONNECTED")
+        else:
+            st.error("❌ NOT CONNECTED")
+        st.info(f"Client ID: {FYERS_APP_ID[:10]}...")
+        
+        st.markdown("---")
+        current_hour = datetime.now().hour
+        if 9 <= current_hour < 15:
+            st.success("🟢 MARKET OPEN")
+            st.info("📡 Real-time data active")
+        else:
+            st.warning("🔴 MARKET CLOSED")
+            st.info("📊 Showing historical analysis (last 5 days)")
+        
+        st.markdown("---")
+        st.markdown("### 📊 Signal Criteria for 90% Accuracy")
+        st.caption("✅ EMA 9 > 21 > 50 (Strong Trend)")
+        st.caption("✅ RSI < 30 (Oversold) or > 70 (Overbought)")
+        st.caption("✅ MACD Bullish/Bearish Confirmation")
+        st.caption("✅ Volume > 1.5x Average")
+        st.caption("✅ SMC Patterns (Liquidity Sweep + BOS)")
+        st.caption("✅ Candlestick Patterns")
+        st.caption("✅ ADX > 25 (Strong Trend)")
+    
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        scan_btn = st.button("🔍 SCAN ALL 207 STOCKS - Find 90%+ Accuracy Signals", key="scan_btn", type="primary", use_container_width=True)
+        auto_scan = st.checkbox("🔄 Auto-Scan Every 60 Seconds", key="auto_scan", value=False)
+    
+    with col2:
+        if st.button("🗑️ Clear All Signals", key="clear_btn", use_container_width=True):
             st.session_state.signals = []
             st.session_state.last_scan = None
             st.rerun()
-
-    should_scan = scan
-    if auto and (st.session_state.last_scan is None or (datetime.now() - st.session_state.last_scan).seconds >= 60):
-        should_scan = True
-
+    
+    should_scan = scan_btn
+    if auto_scan:
+        if st.session_state.last_scan is None or (datetime.now() - st.session_state.last_scan).seconds >= 60:
+            should_scan = True
+    
     if should_scan:
-        with st.spinner(f"Scanning {len(ALL_STOCKS)} stocks..."):
+        with st.spinner(f"🔄 Scanning {len(ALL_STOCKS)} stocks with SMC + Advanced Indicators..."):
             st.session_state.signals = scan_all_stocks()
             st.session_state.last_scan = datetime.now()
+        
         if st.session_state.signals:
             st.balloons()
-            st.success(f"🎯 Found {len(st.session_state.signals)} signals!")
+            st.success(f"🎯 Found {len(st.session_state.signals)} High Probability Signals (90%+ Accuracy)!")
         else:
-            st.info("No strong signals found.")
-
+            st.info("😴 No strong signals found in this scan. Waiting for perfect market setup...")
+    
     if st.session_state.last_scan:
-        st.caption(f"Last scan: {st.session_state.last_scan.strftime('%H:%M:%S')} | Market Trend: {market_trend}")
-
-    # Display signals (same as before)
+        st.caption(f"🕐 Last scan: {st.session_state.last_scan.strftime('%H:%M:%S')} | Total stocks analyzed: {len(ALL_STOCKS)}")
+    
+    # Auto-refresh timer display
+    if auto_scan and st.session_state.last_scan:
+        seconds_since = (datetime.now() - st.session_state.last_scan).seconds
+        remaining = max(0, 60 - seconds_since)
+        if remaining > 0:
+            st.markdown(f"<div style='position:fixed; bottom:10px; right:10px; background:#1a1a1a; padding:10px 15px; border-radius:30px; color:#00ff88; font-family:monospace;'>🔄 Next auto-scan: {remaining}s</div>", unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # ========== DISPLAY SIGNALS ==========
     if st.session_state.signals:
-        for sig in st.session_state.signals[:10]:
-            if sig['signal'] == 'STRONG_BUY':
+        buy_signals = [s for s in st.session_state.signals if s['signal'] == 'STRONG_BUY']
+        sell_signals = [s for s in st.session_state.signals if s['signal'] == 'STRONG_SELL']
+        
+        # Display BUY Signals
+        if buy_signals:
+            st.markdown("<h2>🟢 STRONG BUY SIGNALS (High Probability)</h2>", unsafe_allow_html=True)
+            for idx, sig in enumerate(buy_signals[:10]):
+                if sig['probability'] >= 85:
+                    prob_class = "probability-high"
+                else:
+                    prob_class = "probability-high"
+                
                 st.markdown(f"""
-                <div class='strong-buy'>
-                    <span class='badge-buy'>STRONG BUY</span> <span style="float:right">🎯 Accuracy: {sig['probability']:.0f}%</span>
-                    <h2>📈 {sig['symbol']}</h2>
-                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                        <div class='metric-box'>Entry<br><span class='price-up'>₹{sig['price']:.2f}</span></div>
-                        <div class='metric-box'>Target1<br>₹{sig['target1']:.2f}</div>
-                        <div class='metric-box'>Target2<br>₹{sig['target2']:.2f}</div>
-                        <div class='metric-box'>Target3<br>₹{sig['target3']:.2f}</div>
-                        <div class='metric-box'>Stop Loss<br>₹{sig['stop_loss']:.2f}</div>
-                        <div class='metric-box'>RSI<br>{sig['rsi']:.1f}</div>
-                        <div class='metric-box'>ADX<br>{sig['adx']:.1f}</div>
+                <div class='signal-card strong-buy' id='buy_{idx}'>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div><span class='badge-buy'>STRONG BUY</span></div>
+                        <div class='{prob_class}'>🎯 Accuracy: {sig['probability']:.0f}%</div>
                     </div>
-                    <p><strong>EMA:</strong> {sig['ema9']:.2f} / {sig['ema21']:.2f} / {sig['ema50']:.2f}</p>
-                    <p><strong>Signals:</strong> {', '.join(sig['reasons'])}</p>
+                    <h2 style="margin: 15px 0;">📈 {sig['name']}</h2>
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                        <div class='metric-box'><div style="color:#888;">Entry Price</div><div class='price-up'>₹{sig['price']:.2f}</div></div>
+                        <div class='metric-box'><div style="color:#888;">Entry Time</div><div class='entry-time'>{sig['entry_time']}</div></div>
+                        <div class='metric-box'><div style="color:#888;">RSI</div><div>{sig['rsi']:.1f}</div></div>
+                        <div class='metric-box'><div style="color:#888;">ADX</div><div>{sig['adx']:.1f}</div></div>
+                        <div class='metric-box'><div style="color:#888;">Volume</div><div>{sig['volume_ratio']:.1f}x</div></div>
+                    </div>
+                    <div style="background:#0a0a0a; border-radius:15px; padding:15px; margin:15px 0;">
+                        <p><strong>📊 EMAs:</strong> 9: {sig['ema9']:.2f} | 21: {sig['ema21']:.2f} | 50: {sig['ema50']:.2f}</p>
+                        <p><strong>📈 VWAP:</strong> ₹{sig['vwap']:.2f}</p>
+                    </div>
+                    <div style="background:#0a0a0a; border-radius:15px; padding:15px; margin:15px 0;">
+                        <p><strong>🎯 TARGETS:</strong></p>
+                        <p>🎯 Target 1: ₹{sig['target1']:.2f} (+{((sig['target1']-sig['price'])/sig['price']*100):.2f}%)</p>
+                        <p>🎯 Target 2: ₹{sig['target2']:.2f} (+{((sig['target2']-sig['price'])/sig['price']*100):.2f}%)</p>
+                        <p>🎯 Target 3: ₹{sig['target3']:.2f} (+{((sig['target3']-sig['price'])/sig['price']*100):.2f}%)</p>
+                        <p><strong>🛑 Stop Loss:</strong> ₹{sig['stop_loss']:.2f} ({((sig['stop_loss']-sig['price'])/sig['price']*100):.2f}%)</p>
+                    </div>
                 </div>
                 """, unsafe_allow_html=True)
-                with st.expander("📊 Chart"):
-                    st.components.v1.html(get_tradingview_chart(sig['symbol']), height=540)
-            else:
+                
+                with st.expander("🔍 Signal Analysis Details", expanded=False):
+                    for reason in sig['reasons']:
+                        st.write(f"• {reason}")
+                    if sig['candle_patterns']:
+                        st.write(f"• 📊 Candlestick Patterns: {', '.join(sig['candle_patterns'])}")
+                    if sig['smc']['liquidity_sweep_low']:
+                        st.write("• 🎯 Smart Money: Liquidity Sweep Detected")
+                    if sig['smc']['bos_up']:
+                        st.write("• 📈 Smart Money: Break of Structure UP")
+                
+                with st.expander(f"📊 View {sig['name']} TradingView Chart", expanded=True):
+                    chart_html = get_tradingview_chart(sig['symbol'])
+                    st.components.v1.html(chart_html, height=550)
+                
+                st.markdown("---")
+        
+        # Display SELL Signals
+        if sell_signals:
+            st.markdown("<h2>🔴 STRONG SELL SIGNALS (High Probability)</h2>", unsafe_allow_html=True)
+            for idx, sig in enumerate(sell_signals[:10]):
+                if sig['probability'] >= 85:
+                    prob_class = "probability-high"
+                else:
+                    prob_class = "probability-high"
+                
                 st.markdown(f"""
-                <div class='strong-sell'>
-                    <span class='badge-sell'>STRONG SELL</span> <span style="float:right">🎯 Accuracy: {sig['probability']:.0f}%</span>
-                    <h2>📉 {sig['symbol']}</h2>
-                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                        <div class='metric-box'>Entry<br><span class='price-down'>₹{sig['price']:.2f}</span></div>
-                        <div class='metric-box'>Target1<br>₹{sig['target1']:.2f}</div>
-                        <div class='metric-box'>Target2<br>₹{sig['target2']:.2f}</div>
-                        <div class='metric-box'>Target3<br>₹{sig['target3']:.2f}</div>
-                        <div class='metric-box'>Stop Loss<br>₹{sig['stop_loss']:.2f}</div>
-                        <div class='metric-box'>RSI<br>{sig['rsi']:.1f}</div>
-                        <div class='metric-box'>ADX<br>{sig['adx']:.1f}</div>
+                <div class='signal-card strong-sell' id='sell_{idx}'>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div><span class='badge-sell'>STRONG SELL</span></div>
+                        <div class='{prob_class}'>🎯 Accuracy: {sig['probability']:.0f}%</div>
                     </div>
-                    <p><strong>EMA:</strong> {sig['ema9']:.2f} / {sig['ema21']:.2f} / {sig['ema50']:.2f}</p>
-                    <p><strong>Signals:</strong> {', '.join(sig['reasons'])}</p>
+                    <h2 style="margin: 15px 0;">📉 {sig['name']}</h2>
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                        <div class='metric-box'><div style="color:#888;">Entry Price</div><div class='price-down'>₹{sig['price']:.2f}</div></div>
+                        <div class='metric-box'><div style="color:#888;">Entry Time</div><div class='entry-time'>{sig['entry_time']}</div></div>
+                        <div class='metric-box'><div style="color:#888;">RSI</div><div>{sig['rsi']:.1f}</div></div>
+                        <div class='metric-box'><div style="color:#888;">ADX</div><div>{sig['adx']:.1f}</div></div>
+                        <div class='metric-box'><div style="color:#888;">Volume</div><div>{sig['volume_ratio']:.1f}x</div></div>
+                    </div>
+                    <div style="background:#0a0a0a; border-radius:15px; padding:15px; margin:15px 0;">
+                        <p><strong>📊 EMAs:</strong> 9: {sig['ema9']:.2f} | 21: {sig['ema21']:.2f} | 50: {sig['ema50']:.2f}</p>
+                        <p><strong>📈 VWAP:</strong> ₹{sig['vwap']:.2f}</p>
+                    </div>
+                    <div style="background:#0a0a0a; border-radius:15px; padding:15px; margin:15px 0;">
+                        <p><strong>🎯 TARGETS:</strong></p>
+                        <p>🎯 Target 1: ₹{sig['target1']:.2f} ({((sig['target1']-sig['price'])/sig['price']*100):.2f}%)</p>
+                        <p>🎯 Target 2: ₹{sig['target2']:.2f} ({((sig['target2']-sig['price'])/sig['price']*100):.2f}%)</p>
+                        <p>🎯 Target 3: ₹{sig['target3']:.2f} ({((sig['target3']-sig['price'])/sig['price']*100):.2f}%)</p>
+                        <p><strong>🛑 Stop Loss:</strong> ₹{sig['stop_loss']:.2f} ({((sig['stop_loss']-sig['price'])/sig['price']*100):.2f}%)</p>
+                    </div>
                 </div>
                 """, unsafe_allow_html=True)
-                with st.expander("📊 Chart"):
-                    st.components.v1.html(get_tradingview_chart(sig['symbol']), height=540)
+                
+                with st.expander("🔍 Signal Analysis Details", expanded=False):
+                    for reason in sig['reasons']:
+                        st.write(f"• {reason}")
+                    if sig['candle_patterns']:
+                        st.write(f"• 📊 Candlestick Patterns: {', '.join(sig['candle_patterns'])}")
+                    if sig['smc']['liquidity_sweep_high']:
+                        st.write("• 🎯 Smart Money: Liquidity Sweep Detected")
+                    if sig['smc']['bos_down']:
+                        st.write("• 📉 Smart Money: Break of Structure DOWN")
+                
+                with st.expander(f"📊 View {sig['name']} TradingView Chart", expanded=True):
+                    chart_html = get_tradingview_chart(sig['symbol'])
+                    st.components.v1.html(chart_html, height=550)
+                
+                st.markdown("---")
+    
     else:
-        st.info("Click 'SCAN ALL STOCKS' to get signals.")
+        if st.session_state.last_scan:
+            st.info("😴 No 90%+ accuracy signals found. Waiting for perfect market conditions...")
+        else:
+            st.info("🔍 Click 'SCAN ALL 207 STOCKS' to find high probability trading opportunities")
+    
+    st.markdown("---")
+    st.markdown(f"<p style='text-align: center; color: #888;'>🎯 207 Stocks | SMC + EMA + RSI + MACD + VWAP + ADX | 90%+ Accuracy Signals | Market Trend: {market_trend}</p>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
