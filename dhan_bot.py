@@ -24,7 +24,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ========== CSS WITH COLORS ==========
+# ========== CSS ==========
 st.markdown("""
 <style>
     .stApp { background-color: #050505; }
@@ -60,43 +60,22 @@ st.markdown("""
     .api-status { background: #1a1a1a; border-radius: 10px; padding: 5px 10px; font-size: 12px; display: inline-block; }
     .entry-time { color: #ffaa00; font-size: 14px; font-family: monospace; }
     
-    /* Gainer - Green Color */
-    .gainer-green {
+    /* Simple Gainer/Loser Colors - Normal Icons */
+    .gainer-normal {
         color: #00ff88 !important;
         font-weight: bold;
-        background: rgba(0, 255, 136, 0.15);
-        padding: 8px 15px;
-        border-radius: 20px;
-        display: inline-block;
     }
-    /* Loser - Red Color */
-    .loser-red {
+    .loser-normal {
         color: #ff3333 !important;
         font-weight: bold;
-        background: rgba(255, 51, 51, 0.15);
-        padding: 8px 15px;
-        border-radius: 20px;
-        display: inline-block;
     }
-    /* High Probability Highlight */
-    .high-probability {
-        background: linear-gradient(135deg, #00ff88 0%, #00cc66 100%);
-        color: #000;
-        padding: 10px 20px;
-        border-radius: 30px;
-        font-weight: bold;
-        animation: pulse 1s ease-in-out infinite;
-        display: inline-block;
-    }
-    .gainers-card {
-        border-left: 5px solid #00ff88;
+    .gainers-card-normal {
         background: linear-gradient(135deg, #0a2a0a 0%, #0a0a0a 100%);
         border-radius: 15px;
         padding: 15px;
         margin: 10px 0;
     }
-    .losers-card {
-        border-left: 5px solid #ff3333;
+    .losers-card-normal {
         background: linear-gradient(135deg, #2a0a0a 0%, #0a0a0a 100%);
         border-radius: 15px;
         padding: 15px;
@@ -110,6 +89,20 @@ st.markdown("""
     @keyframes glow {
         from { box-shadow: 0 0 10px rgba(255, 170, 0, 0.3); }
         to { box-shadow: 0 0 20px rgba(255, 170, 0, 0.8); }
+    }
+    /* Mode Button Colors */
+    .test-mode-active {
+        background-color: #ff6600 !important;
+        color: white !important;
+        border: 2px solid #ffaa00 !important;
+    }
+    .live-mode-active {
+        background-color: #00ff88 !important;
+        color: black !important;
+        border: 2px solid #00ff88 !important;
+    }
+    .mode-button {
+        transition: all 0.3s ease;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -167,7 +160,6 @@ def get_history_fyers(symbol, resolution="15", days=5):
     if not st.session_state.fyers_token:
         return None
     
-    # Test Mode: Dummy data
     if st.session_state.test_mode:
         dates = pd.date_range(end=datetime.now(), periods=80, freq='15min')
         df = pd.DataFrame({
@@ -371,7 +363,6 @@ def detect_candle_patterns(df):
 
 # ========== GENERATE SIGNAL WITH TEST MODE ==========
 def generate_high_accuracy_signal(df, symbol=None):
-    # Test Mode: Force signals for UI testing
     if st.session_state.test_mode:
         test_symbols = ["RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "BHARTIARTL", "KOTAKBANK", "BAJFINANCE", "ITC"]
         if symbol in test_symbols:
@@ -627,26 +618,38 @@ def main():
     st.markdown("<h1>🎯 90% ACCURACY SIGNAL BOT</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #ffaa00;'>SMC | EMA | RSI | MACD | VWAP | ADX | FYERS Live Data</p>", unsafe_allow_html=True)
     
-    # ========== TEST MODE / LIVE MODE TOGGLE BUTTON ==========
+    # ========== TEST MODE / LIVE MODE TOGGLE BUTTONS WITH COLOR CHANGE ==========
     col_mode1, col_mode2, col_mode3 = st.columns([1, 1, 2])
+    
     with col_mode1:
-        if st.button("🧪 TEST MODE", key="test_mode_btn", use_container_width=True):
+        test_btn = st.button("🧪 TEST MODE", key="test_mode_btn", use_container_width=True)
+        if test_btn:
             st.session_state.test_mode = True
             st.session_state.signals = []
             st.session_state.last_scan = None
             st.rerun()
+    
     with col_mode2:
-        if st.button("📡 LIVE MARKET", key="live_mode_btn", use_container_width=True):
+        live_btn = st.button("📡 LIVE MARKET", key="live_mode_btn", use_container_width=True)
+        if live_btn:
             st.session_state.test_mode = False
             st.session_state.signals = []
             st.session_state.last_scan = None
             st.rerun()
     
-    # Show current mode
+    # Show current mode with dynamic color
     if st.session_state.test_mode:
-        st.warning("🧪 **TEST MODE ACTIVE** - Showing demo signals for UI testing")
+        st.markdown("""
+        <div style="background-color:#ff660020; border:2px solid #ff6600; padding:15px; border-radius:15px; margin:10px 0; text-align:center;">
+            <span style="color:#ffaa00; font-size:18px; font-weight:bold;">🧪 TEST MODE ACTIVE - Showing demo signals for UI testing</span>
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        st.success("📡 **LIVE MARKET MODE** - Real data from FYERS API")
+        st.markdown("""
+        <div style="background-color:#00ff8820; border:2px solid #00ff88; padding:15px; border-radius:15px; margin:10px 0; text-align:center;">
+            <span style="color:#00ff88; font-size:18px; font-weight:bold;">📡 LIVE MARKET MODE - Real data from FYERS API</span>
+        </div>
+        """, unsafe_allow_html=True)
     
     # API Status
     if st.session_state.fyers_token:
@@ -667,7 +670,7 @@ def main():
     
     st.markdown("---")
     
-    # ========== TOP GAINERS & LOSERS SECTION WITH COLORS ==========
+    # ========== TOP GAINERS & LOSERS SECTION (Normal Icons) ==========
     st.markdown("<h2>📊 TOP 5 GAINERS & LOSERS</h2>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -684,7 +687,6 @@ def main():
         st.markdown("<h3 style='color:#00ff88;'>🟢 TOP 5 GAINERS</h3>", unsafe_allow_html=True)
         if st.session_state.top_gainers:
             for stock in st.session_state.top_gainers:
-                # Check if this stock also has a signal with high probability
                 has_high_signal = False
                 high_prob = 0
                 for sig in st.session_state.signals:
@@ -693,29 +695,27 @@ def main():
                         high_prob = sig.get('probability', 0)
                         break
                 
-                # GREEN color for gainers
                 if has_high_signal:
                     st.markdown(f"""
-                    <div class='gainers-card highlight-stock'>
+                    <div class='gainers-card-normal highlight-stock'>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <h3>📈 {stock['symbol']}</h3>
                             <div style="text-align: right;">
-                                <div class='high-probability' style="margin-bottom: 5px;">🔥 HIGH PROBABILITY {high_prob:.0f}%</div>
-                                <div class='gainer-green'>+{stock['change_percent']:.2f}%</div>
+                                <div class='high-probability' style="margin-bottom: 5px;">🔥 {high_prob:.0f}%</div>
+                                <div class='gainer-normal'>+{stock['change_percent']:.2f}%</div>
                             </div>
                         </div>
-                        <div>Price: ₹{stock['price']:.2f} | Change: +₹{stock['change']:.2f}</div>
-                        <div style="color:#ffaa00; margin-top: 5px;">⭐ High Probability Signal - Recommended for Trading</div>
+                        <div>₹{stock['price']:.2f} | +₹{stock['change']:.2f}</div>
                     </div>
                     """, unsafe_allow_html=True)
                 else:
                     st.markdown(f"""
-                    <div class='gainers-card'>
+                    <div class='gainers-card-normal'>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <h3>📈 {stock['symbol']}</h3>
-                            <div class='gainer-green'>+{stock['change_percent']:.2f}%</div>
+                            <div class='gainer-normal'>+{stock['change_percent']:.2f}%</div>
                         </div>
-                        <div>Price: ₹{stock['price']:.2f} | Change: +₹{stock['change']:.2f}</div>
+                        <div>₹{stock['price']:.2f} | +₹{stock['change']:.2f}</div>
                     </div>
                     """, unsafe_allow_html=True)
         else:
@@ -725,7 +725,6 @@ def main():
         st.markdown("<h3 style='color:#ff3333;'>🔴 TOP 5 LOSERS</h3>", unsafe_allow_html=True)
         if st.session_state.top_losers:
             for stock in st.session_state.top_losers:
-                # Check if this stock also has a signal
                 has_high_signal = False
                 high_prob = 0
                 for sig in st.session_state.signals:
@@ -734,29 +733,27 @@ def main():
                         high_prob = sig.get('probability', 0)
                         break
                 
-                # RED color for losers
                 if has_high_signal:
                     st.markdown(f"""
-                    <div class='losers-card highlight-stock'>
+                    <div class='losers-card-normal highlight-stock'>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <h3>📉 {stock['symbol']}</h3>
                             <div style="text-align: right;">
-                                <div class='high-probability' style="margin-bottom: 5px;">🔥 HIGH PROBABILITY {high_prob:.0f}%</div>
-                                <div class='loser-red'>{stock['change_percent']:.2f}%</div>
+                                <div class='high-probability' style="margin-bottom: 5px;">🔥 {high_prob:.0f}%</div>
+                                <div class='loser-normal'>{stock['change_percent']:.2f}%</div>
                             </div>
                         </div>
-                        <div>Price: ₹{stock['price']:.2f} | Change: ₹{stock['change']:.2f}</div>
-                        <div style="color:#ffaa00; margin-top: 5px;">⭐ High Probability Signal - Recommended for Trading</div>
+                        <div>₹{stock['price']:.2f} | ₹{stock['change']:.2f}</div>
                     </div>
                     """, unsafe_allow_html=True)
                 else:
                     st.markdown(f"""
-                    <div class='losers-card'>
+                    <div class='losers-card-normal'>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <h3>📉 {stock['symbol']}</h3>
-                            <div class='loser-red'>{stock['change_percent']:.2f}%</div>
+                            <div class='loser-normal'>{stock['change_percent']:.2f}%</div>
                         </div>
-                        <div>Price: ₹{stock['price']:.2f} | Change: ₹{stock['change']:.2f}</div>
+                        <div>₹{stock['price']:.2f} | ₹{stock['change']:.2f}</div>
                     </div>
                     """, unsafe_allow_html=True)
         else:
@@ -832,18 +829,17 @@ def main():
         if buy_signals:
             st.markdown("<h2>🟢 STRONG BUY SIGNALS (High Probability)</h2>", unsafe_allow_html=True)
             for idx, sig in enumerate(buy_signals[:10]):
-                # Highlight high probability with special class
                 highlight_class = "highlight-stock" if sig['probability'] >= 85 else ""
                 
                 st.markdown(f"""
                 <div class='signal-card strong-buy {highlight_class}' id='buy_{idx}'>
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div><span class='badge-buy'>STRONG BUY</span></div>
-                        <div class='probability-high'>🎯 Accuracy: {sig['probability']:.0f}%</div>
+                        <div class='probability-high'>🎯 {sig['probability']:.0f}%</div>
                     </div>
                     <h2 style="margin: 15px 0;">📈 {sig['name']}</h2>
                     <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                        <div class='metric-box'><div style="color:#888;">Entry Price</div><div class='price-up'>₹{sig['price']:.2f}</div></div>
+                        <div class='metric-box'><div style="color:#888;">Entry</div><div class='price-up'>₹{sig['price']:.2f}</div></div>
                         <div class='metric-box'><div style="color:#888;">Entry Time</div><div class='entry-time'>{sig['entry_time']}</div></div>
                         <div class='metric-box'><div style="color:#888;">RSI</div><div>{sig['rsi']:.1f}</div></div>
                         <div class='metric-box'><div style="color:#888;">ADX</div><div>{sig['adx']:.1f}</div></div>
@@ -855,25 +851,23 @@ def main():
                     </div>
                     <div style="background:#0a0a0a; border-radius:15px; padding:15px; margin:15px 0;">
                         <p><strong>🎯 TARGETS:</strong></p>
-                        <p>🎯 Target 1: ₹{sig['target1']:.2f} (+{((sig['target1']-sig['price'])/sig['price']*100):.2f}%)</p>
-                        <p>🎯 Target 2: ₹{sig['target2']:.2f} (+{((sig['target2']-sig['price'])/sig['price']*100):.2f}%)</p>
-                        <p>🎯 Target 3: ₹{sig['target3']:.2f} (+{((sig['target3']-sig['price'])/sig['price']*100):.2f}%)</p>
-                        <p><strong>🛑 Stop Loss:</strong> ₹{sig['stop_loss']:.2f} ({((sig['stop_loss']-sig['price'])/sig['price']*100):.2f}%)</p>
+                        <p>🎯 T1: ₹{sig['target1']:.2f} (+{((sig['target1']-sig['price'])/sig['price']*100):.2f}%)</p>
+                        <p>🎯 T2: ₹{sig['target2']:.2f} (+{((sig['target2']-sig['price'])/sig['price']*100):.2f}%)</p>
+                        <p>🎯 T3: ₹{sig['target3']:.2f} (+{((sig['target3']-sig['price'])/sig['price']*100):.2f}%)</p>
+                        <p><strong>🛑 SL:</strong> ₹{sig['stop_loss']:.2f} ({((sig['stop_loss']-sig['price'])/sig['price']*100):.2f}%)</p>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
                 
-                with st.expander("🔍 Signal Analysis Details", expanded=False):
+                with st.expander("🔍 Analysis & Chart", expanded=False):
                     for reason in sig['reasons']:
                         st.write(f"• {reason}")
                     if sig['candle_patterns']:
-                        st.write(f"• 📊 Candlestick Patterns: {', '.join(sig['candle_patterns'])}")
-                
-                # ========== TRADINGVIEW CHART WITH SIGNAL ==========
-                st.markdown(f"### 📊 {sig['name']} - TradingView Chart with Signal")
-                chart_html = get_tradingview_chart(sig['symbol'], timeframe="15")
-                st.components.v1.html(chart_html, height=550)
-                st.caption(f"📈 {sig['name']} - 15-Minute Chart | Signal: {sig['signal']} with {sig['probability']:.0f}% Accuracy")
+                        st.write(f"• 📊 Candlestick: {', '.join(sig['candle_patterns'])}")
+                    st.markdown("---")
+                    st.markdown(f"### 📊 {sig['name']} - TradingView Chart")
+                    chart_html = get_tradingview_chart(sig['symbol'], timeframe="15")
+                    st.components.v1.html(chart_html, height=550)
                 st.markdown("---")
         
         # SELL SIGNALS
@@ -886,11 +880,11 @@ def main():
                 <div class='signal-card strong-sell {highlight_class}' id='sell_{idx}'>
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div><span class='badge-sell'>STRONG SELL</span></div>
-                        <div class='probability-high'>🎯 Accuracy: {sig['probability']:.0f}%</div>
+                        <div class='probability-high'>🎯 {sig['probability']:.0f}%</div>
                     </div>
                     <h2 style="margin: 15px 0;">📉 {sig['name']}</h2>
                     <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                        <div class='metric-box'><div style="color:#888;">Entry Price</div><div class='price-down'>₹{sig['price']:.2f}</div></div>
+                        <div class='metric-box'><div style="color:#888;">Entry</div><div class='price-down'>₹{sig['price']:.2f}</div></div>
                         <div class='metric-box'><div style="color:#888;">Entry Time</div><div class='entry-time'>{sig['entry_time']}</div></div>
                         <div class='metric-box'><div style="color:#888;">RSI</div><div>{sig['rsi']:.1f}</div></div>
                         <div class='metric-box'><div style="color:#888;">ADX</div><div>{sig['adx']:.1f}</div></div>
@@ -902,35 +896,33 @@ def main():
                     </div>
                     <div style="background:#0a0a0a; border-radius:15px; padding:15px; margin:15px 0;">
                         <p><strong>🎯 TARGETS:</strong></p>
-                        <p>🎯 Target 1: ₹{sig['target1']:.2f} ({((sig['target1']-sig['price'])/sig['price']*100):.2f}%)</p>
-                        <p>🎯 Target 2: ₹{sig['target2']:.2f} ({((sig['target2']-sig['price'])/sig['price']*100):.2f}%)</p>
-                        <p>🎯 Target 3: ₹{sig['target3']:.2f} ({((sig['target3']-sig['price'])/sig['price']*100):.2f}%)</p>
-                        <p><strong>🛑 Stop Loss:</strong> ₹{sig['stop_loss']:.2f} ({((sig['stop_loss']-sig['price'])/sig['price']*100):.2f}%)</p>
+                        <p>🎯 T1: ₹{sig['target1']:.2f} ({((sig['target1']-sig['price'])/sig['price']*100):.2f}%)</p>
+                        <p>🎯 T2: ₹{sig['target2']:.2f} ({((sig['target2']-sig['price'])/sig['price']*100):.2f}%)</p>
+                        <p>🎯 T3: ₹{sig['target3']:.2f} ({((sig['target3']-sig['price'])/sig['price']*100):.2f}%)</p>
+                        <p><strong>🛑 SL:</strong> ₹{sig['stop_loss']:.2f} ({((sig['stop_loss']-sig['price'])/sig['price']*100):.2f}%)</p>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
                 
-                with st.expander("🔍 Signal Analysis Details", expanded=False):
+                with st.expander("🔍 Analysis & Chart", expanded=False):
                     for reason in sig['reasons']:
                         st.write(f"• {reason}")
                     if sig['candle_patterns']:
-                        st.write(f"• 📊 Candlestick Patterns: {', '.join(sig['candle_patterns'])}")
-                
-                # ========== TRADINGVIEW CHART WITH SIGNAL ==========
-                st.markdown(f"### 📊 {sig['name']} - TradingView Chart with Signal")
-                chart_html = get_tradingview_chart(sig['symbol'], timeframe="15")
-                st.components.v1.html(chart_html, height=550)
-                st.caption(f"📉 {sig['name']} - 15-Minute Chart | Signal: {sig['signal']} with {sig['probability']:.0f}% Accuracy")
+                        st.write(f"• 📊 Candlestick: {', '.join(sig['candle_patterns'])}")
+                    st.markdown("---")
+                    st.markdown(f"### 📊 {sig['name']} - TradingView Chart")
+                    chart_html = get_tradingview_chart(sig['symbol'], timeframe="15")
+                    st.components.v1.html(chart_html, height=550)
                 st.markdown("---")
     
     else:
         if st.session_state.last_scan:
-            st.info("😴 No 90%+ accuracy signals found. Try changing to TEST MODE to see demo signals.")
+            st.info("😴 No 90%+ accuracy signals found. Try TEST MODE to see demo signals.")
         else:
             st.info("🔍 Click 'SCAN ALL STOCKS' to find high probability trading opportunities")
     
     st.markdown("---")
-    st.markdown(f"<p style='text-align: center; color: #888;'>FYERS API | 207 Stocks | Market Trend: {market_trend} | Mode: {'TEST' if st.session_state.test_mode else 'LIVE'}</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align: center; color: #888;'>FYERS API | 207 Stocks | Trend: {market_trend} | Mode: {'TEST' if st.session_state.test_mode else 'LIVE'}</p>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
