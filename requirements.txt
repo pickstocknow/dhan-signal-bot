@@ -1,5 +1,5 @@
-dhanhq
+fyers-apiv3
 streamlit
 pandas
 numpy
-requests
+websockets
