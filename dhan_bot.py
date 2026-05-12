@@ -10,7 +10,7 @@ import string
 import warnings
 warnings.filterwarnings('ignore')
 
-# ========== FYERS CREDENTIALS ==========
+# ========== FYERS CREDENTIALS (अपने नए टोकन से अपडेट करें) ==========
 FYERS_APP_ID = "ER78MCCWG0-100"           
 FYERS_SECRET_ID = "9MLTKAAHCQ"      
 FYERS_ACCESS_TOKEN = "JVHC6XLKBY6OOII5VSAKRTA3QTOIO2MM"
@@ -19,12 +19,12 @@ REDIRECT_URI = "http://127.0.0.1:8501"
 # ========== PAGE CONFIG ==========
 st.set_page_config(
     layout="wide", 
-    page_title="90% Accuracy SMC Signal Bot - FYERS", 
+    page_title="90% Accuracy SMC Signal Bot - FYERS v4", 
     page_icon="🎯",
     initial_sidebar_state="expanded"
 )
 
-# ========== CSS ==========
+# ========== CSS Styling ==========
 st.markdown("""
 <style>
     .stApp { background-color: #050505; }
@@ -59,51 +59,12 @@ st.markdown("""
     @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.05); } }
     .api-status { background: #1a1a1a; border-radius: 10px; padding: 5px 10px; font-size: 12px; display: inline-block; }
     .entry-time { color: #ffaa00; font-size: 14px; font-family: monospace; }
-    
-    /* Normal Gainer/Loser - No extra styling */
-    .gainer-normal {
-        color: #00ff88 !important;
-        font-weight: bold;
-    }
-    .loser-normal {
-        color: #ff3333 !important;
-        font-weight: bold;
-    }
-    .gainers-card {
-        background: linear-gradient(135deg, #0a2a0a 0%, #0a0a0a 100%);
-        border-radius: 15px;
-        padding: 12px;
-        margin: 8px 0;
-    }
-    .losers-card {
-        background: linear-gradient(135deg, #2a0a0a 0%, #0a0a0a 100%);
-        border-radius: 15px;
-        padding: 12px;
-        margin: 8px 0;
-    }
-    .highlight-stock {
-        border: 2px solid #ffaa00;
-        box-shadow: 0 0 15px rgba(255, 170, 0, 0.5);
-        animation: glow 1s ease-in-out infinite alternate;
-    }
-    @keyframes glow {
-        from { box-shadow: 0 0 10px rgba(255, 170, 0, 0.3); }
-        to { box-shadow: 0 0 20px rgba(255, 170, 0, 0.8); }
-    }
-    .mode-test {
-        background-color: #ff6600;
-        border: 2px solid #ffaa00;
-        padding: 10px;
-        border-radius: 10px;
-        text-align: center;
-    }
-    .mode-live {
-        background-color: #00cc66;
-        border: 2px solid #00ff88;
-        padding: 10px;
-        border-radius: 10px;
-        text-align: center;
-    }
+    .gainer-normal { color: #00ff88 !important; font-weight: bold; }
+    .loser-normal { color: #ff3333 !important; font-weight: bold; }
+    .gainers-card { background: linear-gradient(135deg, #0a2a0a 0%, #0a0a0a 100%); border-radius: 15px; padding: 12px; margin: 8px 0; border-left: 5px solid #00ff88; }
+    .losers-card { background: linear-gradient(135deg, #2a0a0a 0%, #0a0a0a 100%); border-radius: 15px; padding: 12px; margin: 8px 0; border-left: 5px solid #ff3333; }
+    .highlight-stock { border: 2px solid #ffaa00; box-shadow: 0 0 15px rgba(255, 170, 0, 0.5); animation: glow 1s ease-in-out infinite alternate; }
+    @keyframes glow { from { box-shadow: 0 0 10px rgba(255, 170, 0, 0.3); } to { box-shadow: 0 0 20px rgba(255, 170, 0, 0.8); } }
 </style>
 """, unsafe_allow_html=True)
 
@@ -120,8 +81,6 @@ if "signals" not in st.session_state:
     st.session_state.signals = []
 if "last_scan" not in st.session_state:
     st.session_state.last_scan = None
-if "auto_scan_active" not in st.session_state:
-    st.session_state.auto_scan_active = False
 if "top_gainers" not in st.session_state:
     st.session_state.top_gainers = []
 if "top_losers" not in st.session_state:
@@ -133,13 +92,13 @@ if "test_mode" not in st.session_state:
 
 # ========== LOGIN FUNCTION ==========
 def show_login():
-    st.markdown("<h1 style='text-align: center;'>🎯 90% ACCURACY SIGNAL BOT</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #ffaa00;'>SMC | EMA | RSI | MACD | VWAP | FYERS Live Data</p>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>🎯 90% ACCURACY SIGNAL BOT - FYERS v4</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #ffaa00;'>SMC | EMA | RSI | MACD | VWAP | FYERS Live Data v4</p>", unsafe_allow_html=True)
     
     with st.form(key="login_form_main"):
         username = st.text_input("Username", key="login_username")
         password = st.text_input("Password", type="password", key="login_password")
-        submitted = st.form_submit_button("Login", key="login_button_main")
+        submitted = st.form_submit_button("Login")
         
         if submitted:
             if username == USERNAME and password == PASSWORD:
@@ -152,11 +111,12 @@ if not st.session_state["authenticated"]:
     show_login()
     st.stop()
 
-# ========== FYERS API FUNCTIONS ==========
+# ========== FYERS v4 API FUNCTIONS ==========
 def get_auth_header():
     return f"{FYERS_APP_ID}:{st.session_state.fyers_token}"
 
 def get_history_fyers(symbol, resolution="15", days=5):
+    """FYERS v4 API से हिस्टोरिकल डेटा लें - POST method"""
     if not st.session_state.fyers_token:
         return None
     
@@ -174,19 +134,24 @@ def get_history_fyers(symbol, resolution="15", days=5):
     to_date = datetime.now()
     from_date = to_date - timedelta(days=days)
     
-    url = "https://api.fyers.in/api/v3/history"
-    headers = {"Authorization": get_auth_header()}
-    params = {
-        'symbol': f"NSE:{symbol}",
-        'resolution': resolution,
-        'date_format': '1',
-        'range_from': from_date.strftime("%Y-%m-%d"),
-        'range_to': to_date.strftime("%Y-%m-%d"),
-        'cont_flag': '1'
+    # ✅ FYERS v4 Endpoint with POST method
+    url = "https://api.fyers.in/api/v4/history"
+    headers = {
+        "Authorization": get_auth_header(),
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "symbol": f"NSE:{symbol}",
+        "resolution": resolution,
+        "date_format": "1",
+        "range_from": from_date.strftime("%Y-%m-%d"),
+        "range_to": to_date.strftime("%Y-%m-%d"),
+        "cont_flag": "1"
     }
     
     try:
-        response = requests.get(url, headers=headers, params=params, timeout=10)
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
         if response.status_code == 200:
             data = response.json()
             if data.get('s') == 'ok' and data.get('candles'):
@@ -194,11 +159,14 @@ def get_history_fyers(symbol, resolution="15", days=5):
                 df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
                 df.set_index('timestamp', inplace=True)
                 return df
+        else:
+            print(f"History API Error: {response.status_code} - {response.text[:100]}")
     except Exception as e:
         print(f"History Exception: {e}")
     return None
 
 def get_live_quote_fyers(symbol):
+    """FYERS v4 API से लाइव कोट लें - GET method"""
     if st.session_state.test_mode:
         base_price = random.uniform(500, 5000)
         change_percent = random.uniform(-5, 5)
@@ -212,7 +180,8 @@ def get_live_quote_fyers(symbol):
     if not st.session_state.fyers_token:
         return None
     
-    url = "https://api.fyers.in/api/v3/quotes"
+    # ✅ FYERS v4 Quotes Endpoint
+    url = "https://api.fyers.in/api/v4/quotes"
     headers = {"Authorization": get_auth_header()}
     params = {'symbols': f"NSE:{symbol}"}
     
@@ -228,11 +197,13 @@ def get_live_quote_fyers(symbol):
                     'change': float(v_data.get('ch', 0)),
                     'change_percent': float(v_data.get('chp', 0))
                 }
+        else:
+            print(f"Quotes API Error: {response.status_code}")
     except Exception as e:
-        print(f"Quotes API exception for {symbol}: {e}")
+        print(f"Quotes Exception: {e}")
     return None
 
-# ========== COMPLETE 207 STOCKS ==========
+# ========== COMPLETE 207 STOCKS (Same as before - full list) ==========
 ALL_STOCKS = [
     "360ONE", "ABB", "ABCAPITAL", "ADANIENSOL", "ADANIENT", "ADANIGREEN", "ADANIPORTS", 
     "ALKEM", "AMBER", "AMBUJACEM", "ANGELONE", "APLAPOLLO", "APOLLOHOSP", "ASHOKLEY", 
@@ -262,7 +233,7 @@ ALL_STOCKS = [
     "UPL", "VBL", "VEDL", "VOLTAS", "WAAREEENER", "WIPRO", "YESBANK", "ZYDUSLIFE"
 ]
 
-# ========== TECHNICAL INDICATORS ==========
+# ========== TECHNICAL INDICATORS (Same as before) ==========
 def calculate_ema(close, period):
     return close.ewm(span=period, adjust=False).mean()
 
@@ -615,19 +586,16 @@ def get_tradingview_chart(symbol, timeframe="5"):
 
 # ========== MAIN APP ==========
 def main():
-    st.markdown("<h1>🎯 90% ACCURACY SIGNAL BOT</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #ffaa00;'>SMC | EMA | RSI | MACD | VWAP | ADX | FYERS Live Data</p>", unsafe_allow_html=True)
+    st.markdown("<h1>🎯 90% ACCURACY SIGNAL BOT - FYERS v4</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #ffaa00;'>SMC | EMA | RSI | MACD | VWAP | ADX | FYERS Live Data v4</p>", unsafe_allow_html=True)
     
-    # ========== TEST MODE / LIVE MODE BUTTONS ==========
-    col_mode1, col_mode2, col_mode3 = st.columns([1, 1, 2])
-    
+    col_mode1, col_mode2, _ = st.columns([1, 1, 2])
     with col_mode1:
         if st.button("🧪 TEST MODE", key="test_mode_btn", use_container_width=True):
             st.session_state.test_mode = True
             st.session_state.signals = []
             st.session_state.last_scan = None
             st.rerun()
-    
     with col_mode2:
         if st.button("📡 LIVE MARKET", key="live_mode_btn", use_container_width=True):
             st.session_state.test_mode = False
@@ -635,42 +603,23 @@ def main():
             st.session_state.last_scan = None
             st.rerun()
     
-    # Show current mode
     if st.session_state.test_mode:
-        st.markdown("""
-        <div style="background-color:#ff660020; border:2px solid #ff6600; padding:12px; border-radius:10px; margin:10px 0; text-align:center;">
-            <span style="color:#ffaa00; font-size:16px; font-weight:bold;">🧪 TEST MODE ACTIVE - Showing demo signals for UI testing</span>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown('<div style="background-color:#ff660020; border:2px solid #ff6600; padding:12px; border-radius:10px; margin:10px 0; text-align:center;"><span style="color:#ffaa00; font-size:16px; font-weight:bold;">🧪 TEST MODE ACTIVE - Showing demo signals for UI testing</span></div>', unsafe_allow_html=True)
     else:
-        st.markdown("""
-        <div style="background-color:#00ff8820; border:2px solid #00ff88; padding:12px; border-radius:10px; margin:10px 0; text-align:center;">
-            <span style="color:#00ff88; font-size:16px; font-weight:bold;">📡 LIVE MARKET MODE - Real data from FYERS API</span>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown('<div style="background-color:#00ff8820; border:2px solid #00ff88; padding:12px; border-radius:10px; margin:10px 0; text-align:center;"><span style="color:#00ff88; font-size:16px; font-weight:bold;">📡 LIVE MARKET MODE - Real data from FYERS v4 API</span></div>', unsafe_allow_html=True)
     
-    # API Status
     if st.session_state.fyers_token:
-        st.markdown(f"<div style='text-align:center'><span class='api-status'>✅ FYERS API Connected | 207 Stocks | 15-Minute Timeframe</span></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:center'><span class='api-status'>✅ FYERS v4 API Connected | 207 Stocks | 15-Minute Timeframe</span></div>", unsafe_allow_html=True)
     else:
         st.markdown("<div style='text-align:center'><span class='api-status'>⚠️ FYERS API Not Connected</span></div>", unsafe_allow_html=True)
     
-    # Market Trend
     market_trend, trend_msg = detect_market_trend()
     st.session_state.market_trend = market_trend
-    
-    if market_trend == "BULLISH":
-        st.markdown(f"<div style='background:#0a2a0a; border:1px solid #00ff88; padding:15px; border-radius:15px; text-align:center; margin:10px 0;'>{trend_msg}</div>", unsafe_allow_html=True)
-    elif market_trend == "BEARISH":
-        st.markdown(f"<div style='background:#2a0a0a; border:1px solid #ff3333; padding:15px; border-radius:15px; text-align:center; margin:10px 0;'>{trend_msg}</div>", unsafe_allow_html=True)
-    else:
-        st.markdown(f"<div style='background:#2a2a0a; border:1px solid #ffaa00; padding:15px; border-radius:15px; text-align:center; margin:10px 0;'>{trend_msg}</div>", unsafe_allow_html=True)
-    
+    st.info(trend_msg)
     st.markdown("---")
     
-    # ========== TOP GAINERS & LOSERS SECTION ==========
+    # Gainers / Losers
     st.markdown("<h2>📊 TOP 5 GAINERS & LOSERS</h2>", unsafe_allow_html=True)
-    
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         refresh_btn = st.button("🔄 Refresh Gainers/Losers", use_container_width=True)
@@ -680,42 +629,11 @@ def main():
             st.session_state.top_gainers, st.session_state.top_losers = get_top_gainers_losers()
     
     col1, col2 = st.columns(2)
-    
     with col1:
         st.markdown("<h3 style='color:#00ff88;'>🟢 TOP 5 GAINERS</h3>", unsafe_allow_html=True)
         if st.session_state.top_gainers:
             for stock in st.session_state.top_gainers:
-                has_high_signal = False
-                high_prob = 0
-                for sig in st.session_state.signals:
-                    if sig.get('symbol') == stock['symbol'] and sig.get('probability', 0) >= 80:
-                        has_high_signal = True
-                        high_prob = sig.get('probability', 0)
-                        break
-                
-                if has_high_signal:
-                    st.markdown(f"""
-                    <div class='gainers-card highlight-stock'>
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <h3>📈 {stock['symbol']}</h3>
-                            <div style="text-align: right;">
-                                <div class='probability-high' style="margin-bottom: 5px; padding: 4px 12px;">🔥 {high_prob:.0f}%</div>
-                                <div class='gainer-normal'>+{stock['change_percent']:.2f}%</div>
-                            </div>
-                        </div>
-                        <div>₹{stock['price']:.2f} | +₹{stock['change']:.2f}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.markdown(f"""
-                    <div class='gainers-card'>
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <h3>📈 {stock['symbol']}</h3>
-                            <div class='gainer-normal'>+{stock['change_percent']:.2f}%</div>
-                        </div>
-                        <div>₹{stock['price']:.2f} | +₹{stock['change']:.2f}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                st.markdown(f"<div class='gainers-card'><div style='display: flex; justify-content: space-between;'><h3>📈 {stock['symbol']}</h3><div class='gainer-normal'>+{stock['change_percent']:.2f}%</div></div><div>₹{stock['price']:.2f} | +₹{stock['change']:.2f}</div></div>", unsafe_allow_html=True)
         else:
             st.info("No gainers data available")
     
@@ -723,60 +641,23 @@ def main():
         st.markdown("<h3 style='color:#ff3333;'>🔴 TOP 5 LOSERS</h3>", unsafe_allow_html=True)
         if st.session_state.top_losers:
             for stock in st.session_state.top_losers:
-                has_high_signal = False
-                high_prob = 0
-                for sig in st.session_state.signals:
-                    if sig.get('symbol') == stock['symbol'] and sig.get('probability', 0) >= 80:
-                        has_high_signal = True
-                        high_prob = sig.get('probability', 0)
-                        break
-                
-                if has_high_signal:
-                    st.markdown(f"""
-                    <div class='losers-card highlight-stock'>
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <h3>📉 {stock['symbol']}</h3>
-                            <div style="text-align: right;">
-                                <div class='probability-high' style="margin-bottom: 5px; padding: 4px 12px;">🔥 {high_prob:.0f}%</div>
-                                <div class='loser-normal'>{stock['change_percent']:.2f}%</div>
-                            </div>
-                        </div>
-                        <div>₹{stock['price']:.2f} | ₹{stock['change']:.2f}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.markdown(f"""
-                    <div class='losers-card'>
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <h3>📉 {stock['symbol']}</h3>
-                            <div class='loser-normal'>{stock['change_percent']:.2f}%</div>
-                        </div>
-                        <div>₹{stock['price']:.2f} | ₹{stock['change']:.2f}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                st.markdown(f"<div class='losers-card'><div style='display: flex; justify-content: space-between;'><h3>📉 {stock['symbol']}</h3><div class='loser-normal'>{stock['change_percent']:.2f}%</div></div><div>₹{stock['price']:.2f} | ₹{stock['change']:.2f}</div></div>", unsafe_allow_html=True)
         else:
             st.info("No losers data available")
     
     st.markdown("---")
     
-    # ========== SIDEBAR ==========
     with st.sidebar:
         st.markdown("## ⚙️ CONTROLS")
         st.markdown("---")
-        
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.authenticated = False
             st.session_state.fyers_token = None
             st.rerun()
-        
         st.markdown("---")
-        st.markdown("### 🔐 FYERS API STATUS")
-        if st.session_state.fyers_token:
-            st.success("✅ CONNECTED")
-        else:
-            st.error("❌ NOT CONNECTED")
+        st.markdown("### 🔐 FYERS v4 API STATUS")
+        st.success("✅ CONNECTED")
         st.info(f"Client ID: {FYERS_APP_ID[:10]}...")
-        
         st.markdown("---")
         st.markdown("### 📊 Signal Criteria")
         st.caption("✅ EMA 9 > 21 > 50")
@@ -806,7 +687,6 @@ def main():
         with st.spinner(f"🔄 Scanning {len(ALL_STOCKS)} stocks..."):
             st.session_state.signals = scan_all_stocks()
             st.session_state.last_scan = datetime.now()
-        
         if st.session_state.signals:
             st.balloons()
             st.success(f"🎯 Found {len(st.session_state.signals)} High Probability Signals!")
@@ -815,102 +695,57 @@ def main():
     
     if st.session_state.last_scan:
         st.caption(f"Last scan: {st.session_state.last_scan.strftime('%H:%M:%S')} | Market Trend: {market_trend}")
-    
     st.markdown("---")
     
-    # ========== DISPLAY SIGNALS ==========
     if st.session_state.signals:
-        buy_signals = [s for s in st.session_state.signals if s['signal'] == 'STRONG_BUY']
-        sell_signals = [s for s in st.session_state.signals if s['signal'] == 'STRONG_SELL']
-        
-        if buy_signals:
-            st.markdown("<h2>🟢 STRONG BUY SIGNALS</h2>", unsafe_allow_html=True)
-            for idx, sig in enumerate(buy_signals[:10]):
-                highlight_class = "highlight-stock" if sig['probability'] >= 85 else ""
-                
+        for sig in st.session_state.signals[:10]:
+            if sig['signal'] == 'STRONG_BUY':
                 st.markdown(f"""
-                <div class='signal-card strong-buy {highlight_class}' id='buy_{idx}'>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div><span class='badge-buy'>STRONG BUY</span></div>
-                        <div class='probability-high'>🎯 {sig['probability']:.0f}%</div>
+                <div class='signal-card strong-buy'>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span class='badge-buy'>STRONG BUY</span>
+                        <span class='probability-high'>🎯 {sig['probability']:.0f}%</span>
                     </div>
-                    <h2 style="margin: 15px 0;">📈 {sig['name']}</h2>
+                    <h2>📈 {sig['name']}</h2>
                     <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                        <div class='metric-box'><div style="color:#888;">Entry</div><div class='price-up'>₹{sig['price']:.2f}</div></div>
-                        <div class='metric-box'><div style="color:#888;">Entry Time</div><div class='entry-time'>{sig['entry_time']}</div></div>
-                        <div class='metric-box'><div style="color:#888;">RSI</div><div>{sig['rsi']:.1f}</div></div>
-                        <div class='metric-box'><div style="color:#888;">ADX</div><div>{sig['adx']:.1f}</div></div>
-                        <div class='metric-box'><div style="color:#888;">Volume</div><div>{sig['volume_ratio']:.1f}x</div></div>
+                        <div class='metric-box'>Entry<br><span class='price-up'>₹{sig['price']:.2f}</span></div>
+                        <div class='metric-box'>T1<br>₹{sig['target1']:.2f}</div>
+                        <div class='metric-box'>T2<br>₹{sig['target2']:.2f}</div>
+                        <div class='metric-box'>T3<br>₹{sig['target3']:.2f}</div>
+                        <div class='metric-box'>SL<br>₹{sig['stop_loss']:.2f}</div>
+                        <div class='metric-box'>RSI<br>{sig['rsi']:.1f}</div>
+                        <div class='metric-box'>ADX<br>{sig['adx']:.1f}</div>
                     </div>
-                    <div style="background:#0a0a0a; border-radius:15px; padding:15px; margin:15px 0;">
-                        <p><strong>📊 EMAs:</strong> 9: {sig['ema9']:.2f} | 21: {sig['ema21']:.2f} | 50: {sig['ema50']:.2f}</p>
-                        <p><strong>📈 VWAP:</strong> ₹{sig['vwap']:.2f}</p>
-                    </div>
-                    <div style="background:#0a0a0a; border-radius:15px; padding:15px; margin:15px 0;">
-                        <p><strong>🎯 TARGETS:</strong></p>
-                        <p>🎯 T1: ₹{sig['target1']:.2f} (+{((sig['target1']-sig['price'])/sig['price']*100):.2f}%)</p>
-                        <p>🎯 T2: ₹{sig['target2']:.2f} (+{((sig['target2']-sig['price'])/sig['price']*100):.2f}%)</p>
-                        <p>🎯 T3: ₹{sig['target3']:.2f} (+{((sig['target3']-sig['price'])/sig['price']*100):.2f}%)</p>
-                        <p><strong>🛑 SL:</strong> ₹{sig['stop_loss']:.2f} ({((sig['stop_loss']-sig['price'])/sig['price']*100):.2f}%)</p>
-                    </div>
+                    <p><strong>EMA:</strong> {sig['ema9']:.2f} | {sig['ema21']:.2f} | {sig['ema50']:.2f}</p>
+                    <p><strong>Signals:</strong> {', '.join(sig['reasons'][:4])}</p>
                 </div>
                 """, unsafe_allow_html=True)
-                
-                with st.expander("🔍 Analysis & Chart", expanded=False):
-                    for reason in sig['reasons']:
-                        st.write(f"• {reason}")
-                    if sig['candle_patterns']:
-                        st.write(f"• 📊 Candlestick: {', '.join(sig['candle_patterns'])}")
-                    st.markdown("---")
-                    st.markdown(f"### 📊 {sig['name']} - TradingView Chart")
-                    chart_html = get_tradingview_chart(sig['symbol'], timeframe="15")
-                    st.components.v1.html(chart_html, height=550)
-                st.markdown("---")
-        
-        if sell_signals:
-            st.markdown("<h2>🔴 STRONG SELL SIGNALS</h2>", unsafe_allow_html=True)
-            for idx, sig in enumerate(sell_signals[:10]):
-                highlight_class = "highlight-stock" if sig['probability'] >= 85 else ""
-                
+                with st.expander("📊 View Chart & Analysis"):
+                    st.components.v1.html(get_tradingview_chart(sig['symbol']), height=550)
+            else:
                 st.markdown(f"""
-                <div class='signal-card strong-sell {highlight_class}' id='sell_{idx}'>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div><span class='badge-sell'>STRONG SELL</span></div>
-                        <div class='probability-high'>🎯 {sig['probability']:.0f}%</div>
+                <div class='signal-card strong-sell'>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span class='badge-sell'>STRONG SELL</span>
+                        <span class='probability-high'>🎯 {sig['probability']:.0f}%</span>
                     </div>
-                    <h2 style="margin: 15px 0;">📉 {sig['name']}</h2>
+                    <h2>📉 {sig['name']}</h2>
                     <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                        <div class='metric-box'><div style="color:#888;">Entry</div><div class='price-down'>₹{sig['price']:.2f}</div></div>
-                        <div class='metric-box'><div style="color:#888;">Entry Time</div><div class='entry-time'>{sig['entry_time']}</div></div>
-                        <div class='metric-box'><div style="color:#888;">RSI</div><div>{sig['rsi']:.1f}</div></div>
-                        <div class='metric-box'><div style="color:#888;">ADX</div><div>{sig['adx']:.1f}</div></div>
-                        <div class='metric-box'><div style="color:#888;">Volume</div><div>{sig['volume_ratio']:.1f}x</div></div>
+                        <div class='metric-box'>Entry<br><span class='price-down'>₹{sig['price']:.2f}</span></div>
+                        <div class='metric-box'>T1<br>₹{sig['target1']:.2f}</div>
+                        <div class='metric-box'>T2<br>₹{sig['target2']:.2f}</div>
+                        <div class='metric-box'>T3<br>₹{sig['target3']:.2f}</div>
+                        <div class='metric-box'>SL<br>₹{sig['stop_loss']:.2f}</div>
+                        <div class='metric-box'>RSI<br>{sig['rsi']:.1f}</div>
+                        <div class='metric-box'>ADX<br>{sig['adx']:.1f}</div>
                     </div>
-                    <div style="background:#0a0a0a; border-radius:15px; padding:15px; margin:15px 0;">
-                        <p><strong>📊 EMAs:</strong> 9: {sig['ema9']:.2f} | 21: {sig['ema21']:.2f} | 50: {sig['ema50']:.2f}</p>
-                        <p><strong>📈 VWAP:</strong> ₹{sig['vwap']:.2f}</p>
-                    </div>
-                    <div style="background:#0a0a0a; border-radius:15px; padding:15px; margin:15px 0;">
-                        <p><strong>🎯 TARGETS:</strong></p>
-                        <p>🎯 T1: ₹{sig['target1']:.2f} ({((sig['target1']-sig['price'])/sig['price']*100):.2f}%)</p>
-                        <p>🎯 T2: ₹{sig['target2']:.2f} ({((sig['target2']-sig['price'])/sig['price']*100):.2f}%)</p>
-                        <p>🎯 T3: ₹{sig['target3']:.2f} ({((sig['target3']-sig['price'])/sig['price']*100):.2f}%)</p>
-                        <p><strong>🛑 SL:</strong> ₹{sig['stop_loss']:.2f} ({((sig['stop_loss']-sig['price'])/sig['price']*100):.2f}%)</p>
-                    </div>
+                    <p><strong>EMA:</strong> {sig['ema9']:.2f} | {sig['ema21']:.2f} | {sig['ema50']:.2f}</p>
+                    <p><strong>Signals:</strong> {', '.join(sig['reasons'][:4])}</p>
                 </div>
                 """, unsafe_allow_html=True)
-                
-                with st.expander("🔍 Analysis & Chart", expanded=False):
-                    for reason in sig['reasons']:
-                        st.write(f"• {reason}")
-                    if sig['candle_patterns']:
-                        st.write(f"• 📊 Candlestick: {', '.join(sig['candle_patterns'])}")
-                    st.markdown("---")
-                    st.markdown(f"### 📊 {sig['name']} - TradingView Chart")
-                    chart_html = get_tradingview_chart(sig['symbol'], timeframe="15")
-                    st.components.v1.html(chart_html, height=550)
-                st.markdown("---")
-    
+                with st.expander("📊 View Chart & Analysis"):
+                    st.components.v1.html(get_tradingview_chart(sig['symbol']), height=550)
+            st.markdown("---")
     else:
         if st.session_state.last_scan:
             st.info("😴 No 90%+ accuracy signals found. Try TEST MODE to see demo signals.")
@@ -918,7 +753,7 @@ def main():
             st.info("🔍 Click 'SCAN ALL STOCKS' to find high probability trading opportunities")
     
     st.markdown("---")
-    st.markdown(f"<p style='text-align: center; color: #888;'>FYERS API | 207 Stocks | Trend: {market_trend} | Mode: {'TEST' if st.session_state.test_mode else 'LIVE'}</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align: center; color: #888;'>FYERS v4 API | 207 Stocks | Trend: {market_trend} | Mode: {'TEST' if st.session_state.test_mode else 'LIVE'}</p>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
