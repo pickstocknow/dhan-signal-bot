@@ -3,14 +3,14 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import time
-import requests
+from dhanhq import dhanhq
 
-# ========== DHAN CREDENTIALS ==========
+# ========== DHAN CREDENTIALS (APNA NAYA TOKEN YAHAN DALEN) ==========
 DHAN_CLIENT_ID = "1103750176"
-# ⚠️ Your token expires every 24 hours. Replace with a fresh one if you get 401 errors.
 DHAN_ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzc4NjQyOTE3LCJpYXQiOjE3Nzg1NTY1MTcsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTAzNzUwMTc2In0.E709I8Hi0529OYvXDYvL_IOLTzPqaJnjXrTkCAicbgG5OrIhD13jRIQNpStTOxppZ6yYr3dxAVOPUA0jMw-QOg"
-DHAN_API_KEY = "817685e9"
-DHAN_API_SECRET = "04eda619-f3a1-4342-b34a-54422ebe55f7"
+
+# Initialize Dhan client
+dh = dhanhq(DHAN_CLIENT_ID, DHAN_ACCESS_TOKEN)
 
 # ========== USER LOGIN ==========
 USER_CREDENTIALS = {
@@ -67,81 +67,59 @@ for key in ["signals", "last_scan", "top_gainers", "top_losers", "market_trend"]
         elif key == "top_losers": st.session_state.top_losers = []
         elif key == "market_trend": st.session_state.market_trend = "NEUTRAL"
 
-# ========== CORRECT DHAN API FUNCTIONS ==========
-def get_dhan_headers():
-    return {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'access-token': DHAN_ACCESS_TOKEN,
-        'client-id': DHAN_CLIENT_ID
-    }
-
-def fetch_ohlc_batch(symbols_list):
-    """एक ही कॉल में कई स्टॉक्स का OHLC डेटा लें"""
+# ========== DHAN API FUNCTIONS USING OFFICIAL LIBRARY ==========
+def get_live_quote(symbol):
+    """Get live quote using dhanhq library (handles rate limits internally)"""
     try:
-        url = "https://api.dhan.co/v2/marketfeed/ohlc"
-        payload = symbols_list
-        response = requests.post(url, headers=get_dhan_headers(), json=payload, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            if isinstance(data, list):
-                result = {}
-                for idx, sym in enumerate(symbols_list):
-                    if idx < len(data):
-                        item = data[idx]
-                        result[sym] = {
-                            'ltp': item.get('lastPrice', 0),
-                            'change': item.get('change', 0),
-                            'change_percent': item.get('changePercent', 0)
-                        }
-                return result
-        else:
-            st.error(f"Batch error {response.status_code}: {response.text[:200]}")
+        quote = dh.get_quote(symbol=symbol, exchange_segment="NSE", instrument="EQUITY")
+        if quote and 'lastTradedPrice' in quote:
+            return {
+                'ltp': float(quote['lastTradedPrice']),
+                'change': float(quote['netChange']),
+                'change_percent': float(quote['percentChange'])
+            }
     except Exception as e:
-        st.error(f"Batch exception: {e}")
+        st.error(f"Quote error {symbol}: {str(e)}")
     return None
 
 def get_dhan_history(symbol, interval="5", days=5):
-    """Historical data using POST /v2/charts/historical"""
+    """Get historical data using dhanhq"""
     try:
         to_date = datetime.now()
         from_date = to_date - timedelta(days=days)
-        url = "https://api.dhan.co/v2/charts/historical"
-        payload = {
-            "symbol": symbol,
-            "exchangeSegment": "NSE",
-            "instrument": "EQUITY",
-            "fromDate": from_date.strftime("%Y-%m-%d"),
-            "toDate": to_date.strftime("%Y-%m-%d"),
-            "interval": interval
-        }
-        response = requests.post(url, headers=get_dhan_headers(), json=payload, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            candles = data.get("data", {}).get("candles", [])
-            if candles:
-                df_data = []
-                for c in candles:
-                    df_data.append({
-                        'timestamp': pd.to_datetime(c[0], unit='ms'),
-                        'Open': c[1], 'High': c[2], 'Low': c[3], 'Close': c[4], 'Volume': c[5]
-                    })
-                df = pd.DataFrame(df_data)
-                df.set_index('timestamp', inplace=True)
-                return df
-        else:
-            st.error(f"History error {response.status_code} for {symbol}: {response.text[:200]}")
+        candles = dh.get_historical_data(
+            symbol=symbol,
+            exchange_segment="NSE",
+            instrument="EQUITY",
+            from_date=from_date.strftime("%Y-%m-%d"),
+            to_date=to_date.strftime("%Y-%m-%d"),
+            interval=interval
+        )
+        if candles and isinstance(candles, list) and len(candles) > 0:
+            df_data = []
+            for c in candles:
+                df_data.append({
+                    'timestamp': pd.to_datetime(c['timestamp'], unit='ms'),
+                    'Open': float(c['open']),
+                    'High': float(c['high']),
+                    'Low': float(c['low']),
+                    'Close': float(c['close']),
+                    'Volume': int(c['volume'])
+                })
+            df = pd.DataFrame(df_data)
+            df.set_index('timestamp', inplace=True)
+            return df
     except Exception as e:
-        st.error(f"History exception {symbol}: {e}")
+        st.error(f"History error {symbol}: {str(e)}")
     return None
 
-# ========== STOCKS LIST (extensive – you can keep yours) ==========
+# ========== STOCKS LIST (SMALLER FOR TESTING, AVOIDS RATE LIMITS) ==========
 ALL_STOCKS = [
     "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "BHARTIARTL",
     "KOTAKBANK", "BAJFINANCE", "ITC", "LT", "WIPRO", "AXISBANK", "HCLTECH"
-]  # You can replace with your full list later
+]
 
-# ========== TECHNICAL INDICATORS (all your functions – unchanged) ==========
+# ========== TECHNICAL INDICATORS ==========
 def calculate_ema(close, period): return close.ewm(span=period, adjust=False).mean()
 def calculate_rsi(close, period=14):
     delta = close.diff()
@@ -190,26 +168,20 @@ def calculate_volume_profile(df):
     avg_vol = df['Volume'].rolling(20).mean()
     return df['Volume'].iloc[-1] / avg_vol.iloc[-1] if avg_vol.iloc[-1] > 0 else 1
 def calculate_probability(signal, rsi, adx, volume_ratio, market_trend):
-    base = signal.get('probability', 70) if isinstance(signal, dict) else 70
-    if isinstance(signal, dict):
-        if signal['signal'] == 'STRONG_BUY':
-            if rsi < 30: base += 8
-            elif rsi < 40: base += 4
-        else:
-            if rsi > 70: base += 8
-            elif rsi > 60: base += 4
-    else:
+    base = 70
+    if signal.get('signal') == 'STRONG_BUY':
         if rsi < 30: base += 8
         elif rsi < 40: base += 4
-        elif rsi > 70: base += 8
+    elif signal.get('signal') == 'STRONG_SELL':
+        if rsi > 70: base += 8
         elif rsi > 60: base += 4
     if adx > 35: base += 5
     elif adx > 25: base += 2
     if volume_ratio > 2: base += 5
     elif volume_ratio > 1.5: base += 2
-    if market_trend == 'BULLISH' and isinstance(signal, dict) and signal.get('signal') == 'STRONG_BUY':
+    if market_trend == 'BULLISH' and signal.get('signal') == 'STRONG_BUY':
         base += 5
-    elif market_trend == 'BEARISH' and isinstance(signal, dict) and signal.get('signal') == 'STRONG_SELL':
+    elif market_trend == 'BEARISH' and signal.get('signal') == 'STRONG_SELL':
         base += 5
     else:
         base -= 3
@@ -241,7 +213,6 @@ def generate_signal(df, symbol=None):
     bullish_score, bearish_score = 0, 0
     reasons_bullish, reasons_bearish = [], []
 
-    # EMA
     if curr_ema9 > curr_ema21 > curr_ema50:
         bullish_score += 25; reasons_bullish.append("✅ EMA 9>21>50")
     elif curr_ema9 > curr_ema21:
@@ -250,12 +221,12 @@ def generate_signal(df, symbol=None):
         bearish_score += 25; reasons_bearish.append("❌ EMA 9<21<50")
     elif curr_ema9 < curr_ema21:
         bearish_score += 15; reasons_bearish.append("❌ EMA 9<21")
-    # VWAP
+    
     if current_price > curr_vwap:
         bullish_score += 15; reasons_bullish.append("✅ Above VWAP")
     else:
         bearish_score += 15; reasons_bearish.append("❌ Below VWAP")
-    # RSI
+    
     if curr_rsi < 30:
         bullish_score += 20; reasons_bullish.append(f"✅ RSI {curr_rsi:.1f} oversold")
     elif curr_rsi < 40:
@@ -264,29 +235,29 @@ def generate_signal(df, symbol=None):
         bearish_score += 20; reasons_bearish.append(f"❌ RSI {curr_rsi:.1f} overbought")
     elif curr_rsi > 60:
         bearish_score += 10
-    # MACD
+    
     if curr_macd > 0:
         bullish_score += 15; reasons_bullish.append("✅ MACD bullish")
     else:
         bearish_score += 15; reasons_bearish.append("❌ MACD bearish")
-    # Bollinger
+    
     if current_price <= bb_lower.iloc[-1]:
         bullish_score += 10
     elif current_price >= bb_upper.iloc[-1]:
         bearish_score += 10
-    # ADX
+    
     if curr_adx > 25:
         if plus_di.iloc[-1] > minus_di.iloc[-1]:
             bullish_score += 10; reasons_bullish.append(f"✅ ADX {curr_adx:.1f}")
         else:
             bearish_score += 10; reasons_bearish.append(f"❌ ADX {curr_adx:.1f}")
-    # Volume
+    
     if volume_ratio > 1.5:
         if bullish_score > bearish_score:
             bullish_score += 10; reasons_bullish.append(f"✅ Volume {volume_ratio:.1f}x")
         else:
             bearish_score += 10; reasons_bearish.append(f"❌ Volume {volume_ratio:.1f}x")
-    # Candlestick
+    
     for p in patterns:
         if "Bullish" in p or "Hammer" in p:
             bullish_score += 10; reasons_bullish.append(f"📊 {p}")
@@ -294,46 +265,38 @@ def generate_signal(df, symbol=None):
             bearish_score += 10; reasons_bearish.append(f"📊 {p}")
 
     if bullish_score >= 70 and bullish_score > bearish_score:
-        prob = min(98, bullish_score)
         return {
-            'signal': 'STRONG_BUY', 'probability': prob, 'price': current_price,
+            'signal': 'STRONG_BUY', 'price': current_price,
             'target1': current_price + atr*1.5, 'target2': current_price + atr*2.5, 'target3': current_price + atr*4,
             'stop_loss': current_price - atr*1.2, 'rsi': curr_rsi, 'adx': curr_adx,
             'volume_ratio': volume_ratio, 'vwap': curr_vwap,
             'ema9': curr_ema9, 'ema21': curr_ema21, 'ema50': curr_ema50,
-            'reasons': reasons_bullish[:5], 'candle_patterns': patterns
+            'reasons': reasons_bullish[:5], 'candle_patterns': patterns, 'probability': min(98, bullish_score)
         }
     elif bearish_score >= 70 and bearish_score > bullish_score:
-        prob = min(98, bearish_score)
         return {
-            'signal': 'STRONG_SELL', 'probability': prob, 'price': current_price,
+            'signal': 'STRONG_SELL', 'price': current_price,
             'target1': current_price - atr*1.5, 'target2': current_price - atr*2.5, 'target3': current_price - atr*4,
             'stop_loss': current_price + atr*1.2, 'rsi': curr_rsi, 'adx': curr_adx,
             'volume_ratio': volume_ratio, 'vwap': curr_vwap,
             'ema9': curr_ema9, 'ema21': curr_ema21, 'ema50': curr_ema50,
-            'reasons': reasons_bearish[:5], 'candle_patterns': patterns
+            'reasons': reasons_bearish[:5], 'candle_patterns': patterns, 'probability': min(98, bearish_score)
         }
     return None
 
-# ========== GAINERS, LOSERS, MARKET TREND ==========
+# ========== GAINERS/LOSERS (ONE BY ONE WITH DELAY TO AVOID RATE LIMIT) ==========
 def get_top_gainers_losers():
-    gainers = []
-    losers = []
+    gainers, losers = [], []
     stocks = ["RELIANCE","TCS","HDFCBANK","INFY","ICICIBANK","SBIN","BHARTIARTL","KOTAKBANK","BAJFINANCE","ITC","LT","WIPRO","AXISBANK","HCLTECH"]
-    
-    # एक ही कॉल में सबका डेटा लें
-    quotes = fetch_ohlc_batch(stocks)
-    
-    if quotes:
-        for sym in stocks:
-            q = quotes.get(sym)
-            if q and q['change_percent'] != 0:
-                data = {'symbol': sym, 'price': q['ltp'], 'change': q['change'], 'change_percent': q['change_percent']}
-                if q['change_percent'] > 0:
-                    gainers.append(data)
-                else:
-                    losers.append(data)
-    
+    for sym in stocks:
+        q = get_live_quote(sym)
+        if q and q['change_percent'] != 0:
+            data = {'symbol': sym, 'price': q['ltp'], 'change': q['change'], 'change_percent': q['change_percent']}
+            if q['change_percent'] > 0:
+                gainers.append(data)
+            else:
+                losers.append(data)
+        time.sleep(0.5)  # Increased delay to avoid rate limit
     gainers.sort(key=lambda x: x['change_percent'], reverse=True)
     losers.sort(key=lambda x: x['change_percent'])
     return gainers[:5], losers[:5]
@@ -341,20 +304,14 @@ def get_top_gainers_losers():
 def detect_market_trend():
     bullish, bearish = 0, 0
     trend_stocks = ["RELIANCE","TCS","HDFCBANK","INFY","ICICIBANK","SBIN","BHARTIARTL"]
-    
-    quotes = fetch_ohlc_batch(trend_stocks)
-    
-    if quotes:
-        for sym in trend_stocks:
-            q = quotes.get(sym)
-            if q:
-                if q['change'] > 0:
-                    bullish += 1
-                else:
-                    bearish += 1
-    else:
-        return "NEUTRAL", "🟡 NEUTRAL (API fail)"
-    
+    for sym in trend_stocks:
+        q = get_live_quote(sym)
+        if q:
+            if q['change'] > 0:
+                bullish += 1
+            else:
+                bearish += 1
+        time.sleep(0.5)
     if bullish > bearish + 2:
         return "BULLISH", f"🟢 BULLISH ({bullish} up)"
     if bearish > bullish + 2:
@@ -376,7 +333,7 @@ def scan_all_stocks():
                 sig['symbol'] = sym
                 sig['entry_time'] = datetime.now().strftime("%H:%M:%S")
                 signals.append(sig)
-        time.sleep(0.3)
+        time.sleep(0.3)  # Slight delay to avoid rate limits
     progress.empty()
     status.empty()
     signals.sort(key=lambda x: x['probability'], reverse=True)
@@ -438,7 +395,7 @@ def main():
     col_btn1, col_btn2 = st.columns([2,1])
     with col_btn1:
         scan = st.button("🔍 SCAN ALL STOCKS - FIND 90%+ SIGNALS", type="primary", use_container_width=True)
-        auto = st.checkbox("🔄 AUTO-SCAN (Every 60 sec)", value=True)
+        auto = st.checkbox("🔄 AUTO-SCAN (Every 60 sec)", value=True, key="auto_scan")
     with col_btn2:
         if st.button("🗑️ Clear Signals"):
             st.session_state.signals = []
@@ -454,19 +411,16 @@ def main():
             st.session_state.signals = scan_all_stocks()
             st.session_state.last_scan = datetime.now()
             for sig in st.session_state.signals:
-                updated_prob = calculate_probability(sig, sig['rsi'], sig['adx'], sig['volume_ratio'], market_trend)
-                sig['probability'] = updated_prob
+                sig['probability'] = calculate_probability(sig, sig['rsi'], sig['adx'], sig['volume_ratio'], market_trend)
         if st.session_state.signals:
             st.balloons()
             st.success(f"🎯 Found {len(st.session_state.signals)} signals!")
-            st.session_state.top_gainers, st.session_state.top_losers = get_top_gainers_losers()
         else:
             st.info("No strong signals found.")
 
     if st.session_state.last_scan:
         st.caption(f"Last scan: {st.session_state.last_scan.strftime('%H:%M:%S')} | Market Trend: {market_trend}")
 
-    # Display signals
     if st.session_state.signals:
         for sig in st.session_state.signals[:10]:
             if sig['signal'] == 'STRONG_BUY':
