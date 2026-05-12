@@ -5,14 +5,14 @@ from datetime import datetime, timedelta
 import time
 from dhanhq import dhanhq
 
-# ========== DHAN CREDENTIALS (APNA NAYA TOKEN YAHAN DALEN) ==========
+# ========== DHAN CREDENTIALS ==========
 DHAN_CLIENT_ID = "1103750176"
 DHAN_ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzc4NjQyOTE3LCJpYXQiOjE3Nzg1NTY1MTcsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTAzNzUwMTc2In0.E709I8Hi0529OYvXDYvL_IOLTzPqaJnjXrTkCAicbgG5OrIhD13jRIQNpStTOxppZ6yYr3dxAVOPUA0jMw-QOg"
 
-# Initialize Dhan client
+# Initialize Dhan client correctly
 dh = dhanhq(DHAN_CLIENT_ID, DHAN_ACCESS_TOKEN)
 
-# ========== USER LOGIN ==========
+# ========== USER LOGIN (same as before) ==========
 USER_CREDENTIALS = {
     "admin": "stock123",
     "trader": "dhan2024",
@@ -67,9 +67,9 @@ for key in ["signals", "last_scan", "top_gainers", "top_losers", "market_trend"]
         elif key == "top_losers": st.session_state.top_losers = []
         elif key == "market_trend": st.session_state.market_trend = "NEUTRAL"
 
-# ========== DHAN API FUNCTIONS USING OFFICIAL LIBRARY ==========
+# ========== DHAN API FUNCTIONS ==========
 def get_live_quote(symbol):
-    """Get live quote using dhanhq library (handles rate limits internally)"""
+    """Get live quote using dhanhq"""
     try:
         quote = dh.get_quote(symbol=symbol, exchange_segment="NSE", instrument="EQUITY")
         if quote and 'lastTradedPrice' in quote:
@@ -113,13 +113,13 @@ def get_dhan_history(symbol, interval="5", days=5):
         st.error(f"History error {symbol}: {str(e)}")
     return None
 
-# ========== STOCKS LIST (SMALLER FOR TESTING, AVOIDS RATE LIMITS) ==========
+# ========== STOCKS LIST ==========
 ALL_STOCKS = [
     "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "BHARTIARTL",
     "KOTAKBANK", "BAJFINANCE", "ITC", "LT", "WIPRO", "AXISBANK", "HCLTECH"
 ]
 
-# ========== TECHNICAL INDICATORS ==========
+# ========== TECHNICAL INDICATORS (same as before, keep all functions) ==========
 def calculate_ema(close, period): return close.ewm(span=period, adjust=False).mean()
 def calculate_rsi(close, period=14):
     delta = close.diff()
@@ -265,26 +265,28 @@ def generate_signal(df, symbol=None):
             bearish_score += 10; reasons_bearish.append(f"📊 {p}")
 
     if bullish_score >= 70 and bullish_score > bearish_score:
+        prob = min(98, bullish_score)
         return {
-            'signal': 'STRONG_BUY', 'price': current_price,
+            'signal': 'STRONG_BUY', 'probability': prob, 'price': current_price,
             'target1': current_price + atr*1.5, 'target2': current_price + atr*2.5, 'target3': current_price + atr*4,
             'stop_loss': current_price - atr*1.2, 'rsi': curr_rsi, 'adx': curr_adx,
             'volume_ratio': volume_ratio, 'vwap': curr_vwap,
             'ema9': curr_ema9, 'ema21': curr_ema21, 'ema50': curr_ema50,
-            'reasons': reasons_bullish[:5], 'candle_patterns': patterns, 'probability': min(98, bullish_score)
+            'reasons': reasons_bullish[:5], 'candle_patterns': patterns
         }
     elif bearish_score >= 70 and bearish_score > bullish_score:
+        prob = min(98, bearish_score)
         return {
-            'signal': 'STRONG_SELL', 'price': current_price,
+            'signal': 'STRONG_SELL', 'probability': prob, 'price': current_price,
             'target1': current_price - atr*1.5, 'target2': current_price - atr*2.5, 'target3': current_price - atr*4,
             'stop_loss': current_price + atr*1.2, 'rsi': curr_rsi, 'adx': curr_adx,
             'volume_ratio': volume_ratio, 'vwap': curr_vwap,
             'ema9': curr_ema9, 'ema21': curr_ema21, 'ema50': curr_ema50,
-            'reasons': reasons_bearish[:5], 'candle_patterns': patterns, 'probability': min(98, bearish_score)
+            'reasons': reasons_bearish[:5], 'candle_patterns': patterns
         }
     return None
 
-# ========== GAINERS/LOSERS (ONE BY ONE WITH DELAY TO AVOID RATE LIMIT) ==========
+# ========== GAINERS/LOSERS (with delay to avoid rate limit) ==========
 def get_top_gainers_losers():
     gainers, losers = [], []
     stocks = ["RELIANCE","TCS","HDFCBANK","INFY","ICICIBANK","SBIN","BHARTIARTL","KOTAKBANK","BAJFINANCE","ITC","LT","WIPRO","AXISBANK","HCLTECH"]
@@ -296,7 +298,7 @@ def get_top_gainers_losers():
                 gainers.append(data)
             else:
                 losers.append(data)
-        time.sleep(0.5)  # Increased delay to avoid rate limit
+        time.sleep(0.5)  # avoid rate limit
     gainers.sort(key=lambda x: x['change_percent'], reverse=True)
     losers.sort(key=lambda x: x['change_percent'])
     return gainers[:5], losers[:5]
@@ -333,7 +335,7 @@ def scan_all_stocks():
                 sig['symbol'] = sym
                 sig['entry_time'] = datetime.now().strftime("%H:%M:%S")
                 signals.append(sig)
-        time.sleep(0.3)  # Slight delay to avoid rate limits
+        time.sleep(0.3)
     progress.empty()
     status.empty()
     signals.sort(key=lambda x: x['probability'], reverse=True)
@@ -371,7 +373,6 @@ def main():
     st.session_state.market_trend = market_trend
     st.info(trend_msg)
 
-    # Gainers / Losers
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
         if st.button("🔄 Refresh Gainers/Losers"):
