@@ -376,7 +376,7 @@ def scan_all_stocks():
                 sig['symbol'] = sym
                 sig['entry_time'] = datetime.now().strftime("%H:%M:%S")
                 signals.append(sig)
-        time.sleep(0.1)
+        time.sleep(0.3)
     progress.empty()
     status.empty()
     signals.sort(key=lambda x: x['probability'], reverse=True)
