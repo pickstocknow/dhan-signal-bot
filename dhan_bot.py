@@ -3,17 +3,22 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import time
-import requests
+from dhanhq import dhanhq
 
 # ========== DHAN CREDENTIALS ==========
 DHAN_CLIENT_ID = "1103750176"
 DHAN_ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzc4NjQyOTE3LCJpYXQiOjE3Nzg1NTY1MTcsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTAzNzUwMTc2In0.E709I8Hi0529OYvXDYvL_IOLTzPqaJnjXrTkCAicbgG5OrIhD13jRIQNpStTOxppZ6yYr3dxAVOPUA0jMw-QOg"
 
+# Initialize Dhan client
+dh = dhanhq.DhanHQ(DHAN_CLIENT_ID, DHAN_ACCESS_TOKEN)
+
 # ========== USER LOGIN ==========
 USER_CREDENTIALS = {"admin": "stock123", "trader": "dhan2024", "user": "password", "vip": "vip2024"}
 st.set_page_config(layout="wide", page_title="🔥 90% Dhan Signal Bot", page_icon="🎯")
+
 def check_login():
-    if "logged_in" not in st.session_state: st.session_state.logged_in = False
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
     if not st.session_state.logged_in:
         st.markdown("<h1 style='text-align: center;'>🔐 LOGIN REQUIRED</h1>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1,2,1])
@@ -26,12 +31,13 @@ def check_login():
                         st.session_state.logged_in = True
                         st.session_state.username = u
                         st.rerun()
-                    else: st.error("❌ Invalid credentials")
+                    else:
+                        st.error("❌ Invalid credentials")
         st.stop()
     return True
 check_login()
 
-# ========== CSS (same as before) ==========
+# ========== CSS STYLING ==========
 st.markdown("""
 <style>
     .stApp { background-color: #050505; }
@@ -55,51 +61,60 @@ for key in ["signals", "last_scan", "top_gainers", "top_losers", "market_trend"]
         elif key == "top_losers": st.session_state.top_losers = []
         elif key == "market_trend": st.session_state.market_trend = "NEUTRAL"
 
-# ========== DHAN API FUNCTIONS (using requests, no dhanhq) ==========
-def get_dhan_headers():
-    return {'Accept': 'application/json', 'Content-Type': 'application/json', 'access-token': DHAN_ACCESS_TOKEN, 'client-id': DHAN_CLIENT_ID}
-
+# ========== DHAN API FUNCTIONS USING OFFICIAL LIBRARY ==========
 def get_dhan_history(symbol, interval="5", days=5):
+    """Fetch historical data using dhanhq"""
     try:
         to_date = datetime.now()
         from_date = to_date - timedelta(days=days)
-        url = "https://api.dhan.co/v2/charts/historical"
-        payload = {"symbol": symbol, "exchangeSegment": "NSE", "instrument": "EQUITY",
-                   "fromDate": from_date.strftime("%Y-%m-%d"), "toDate": to_date.strftime("%Y-%m-%d"), "interval": interval}
-        response = requests.post(url, headers=get_dhan_headers(), json=payload, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            candles = data.get("data", {}).get("candles", [])
-            if candles:
-                df_data = []
-                for c in candles:
-                    df_data.append({'timestamp': pd.to_datetime(c[0], unit='ms'), 'Open': c[1], 'High': c[2], 'Low': c[3], 'Close': c[4], 'Volume': c[5]})
-                df = pd.DataFrame(df_data)
-                df.set_index('timestamp', inplace=True)
-                return df
+        candles = dh.get_historical_data(
+            symbol=symbol,
+            exchange_segment="NSE",
+            instrument="EQUITY",
+            from_date=from_date.strftime("%Y-%m-%d"),
+            to_date=to_date.strftime("%Y-%m-%d"),
+            interval=interval
+        )
+        if candles and isinstance(candles, list) and len(candles) > 0:
+            df_data = []
+            for c in candles:
+                df_data.append({
+                    'timestamp': pd.to_datetime(c['timestamp'], unit='ms'),
+                    'Open': float(c['open']),
+                    'High': float(c['high']),
+                    'Low': float(c['low']),
+                    'Close': float(c['close']),
+                    'Volume': int(c['volume'])
+                })
+            df = pd.DataFrame(df_data)
+            df.set_index('timestamp', inplace=True)
+            return df
         else:
-            st.error(f"History error {response.status_code} for {symbol}: {response.text[:100]}")
+            st.warning(f"No historical data for {symbol}")
     except Exception as e:
-        st.error(f"History exception {symbol}: {e}")
+        st.error(f"History error {symbol}: {e}")
     return None
 
 def get_live_quote(symbol):
+    """Get live quote using dhanhq"""
     try:
-        url = "https://api.dhan.co/v2/equity/quote"
-        params = {"symbol": symbol, "exchangeSegment": "NSE", "instrument": "EQUITY"}
-        response = requests.get(url, headers=get_dhan_headers(), params=params, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            return {'ltp': data.get('lastTradedPrice', 0), 'change': data.get('netChange', 0), 'change_percent': data.get('percentChange', 0)}
+        quote = dh.get_quote(symbol=symbol, exchange_segment="NSE", instrument="EQUITY")
+        if quote and 'lastTradedPrice' in quote:
+            return {
+                'ltp': float(quote['lastTradedPrice']),
+                'change': float(quote['netChange']),
+                'change_percent': float(quote['percentChange'])
+            }
         else:
-            st.error(f"Quote error {response.status_code} for {symbol}: {response.text[:100]}")
+            st.error(f"No quote data for {symbol}")
     except Exception as e:
-        st.error(f"Quote exception {symbol}: {e}")
+        st.error(f"Quote error {symbol}: {e}")
     return None
 
+# ========== STOCKS LIST (for testing) ==========
 ALL_STOCKS = ["RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "BHARTIARTL", "KOTAKBANK", "BAJFINANCE", "ITC", "LT", "WIPRO", "AXISBANK", "HCLTECH"]
 
-# ========== TECHNICAL INDICATORS (copy from previous message, keeping all functions) ==========
+# ========== TECHNICAL INDICATORS (same as before) ==========
 def calculate_ema(close, period): return close.ewm(span=period, adjust=False).mean()
 def calculate_rsi(close, period=14):
     delta = close.diff()
@@ -234,9 +249,11 @@ def get_top_gainers_losers():
     for sym in stocks:
         q = get_live_quote(sym)
         if q and q['change_percent'] != 0:
-            data = {'symbol': sym,'price': q['ltp'],'change': q['change'],'change_percent': q['change_percent']}
-            if q['change_percent'] > 0: gainers.append(data)
-            else: losers.append(data)
+            data = {'symbol': sym, 'price': q['ltp'], 'change': q['change'], 'change_percent': q['change_percent']}
+            if q['change_percent'] > 0:
+                gainers.append(data)
+            else:
+                losers.append(data)
         time.sleep(0.05)
     gainers.sort(key=lambda x: x['change_percent'], reverse=True)
     losers.sort(key=lambda x: x['change_percent'])
@@ -247,10 +264,14 @@ def detect_market_trend():
     for sym in ["RELIANCE","TCS","HDFCBANK","INFY","ICICIBANK","SBIN","BHARTIARTL"]:
         q = get_live_quote(sym)
         if q:
-            if q['change'] > 0: bullish += 1
-            else: bearish += 1
-    if bullish > bearish + 2: return "BULLISH", f"🟢 BULLISH ({bullish} up)"
-    if bearish > bullish + 2: return "BEARISH", f"🔴 BEARISH ({bearish} down)"
+            if q['change'] > 0:
+                bullish += 1
+            else:
+                bearish += 1
+    if bullish > bearish + 2:
+        return "BULLISH", f"🟢 BULLISH ({bullish} up)"
+    if bearish > bullish + 2:
+        return "BEARISH", f"🔴 BEARISH ({bearish} down)"
     return "NEUTRAL", "🟡 NEUTRAL"
 
 def scan_all_stocks():
