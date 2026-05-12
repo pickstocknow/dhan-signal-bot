@@ -163,7 +163,7 @@ def get_dhan_headers():
     }
 
 def get_dhan_history(symbol, interval="5", days=7):
-    """Corrected Dhan API v2 historical data - POST method + proper response parsing"""
+    """Dhan API v2 historical data - POST method"""
     try:
         to_date = datetime.now()
         from_date = to_date - timedelta(days=days)
@@ -178,12 +178,10 @@ def get_dhan_history(symbol, interval="5", days=7):
             "interval": interval
         }
         headers = get_dhan_headers()
-        # ----- FIX 1: Use POST instead of GET -----
         response = requests.post(url, headers=headers, json=payload, timeout=10)
         
         if response.status_code == 200:
             data = response.json()
-            # ----- FIX 2: Correct response structure - data['data']['candles'] -----
             if 'data' in data and 'candles' in data['data']:
                 candles = data['data']['candles']
                 df_data = []
@@ -200,21 +198,17 @@ def get_dhan_history(symbol, interval="5", days=7):
                     df = pd.DataFrame(df_data)
                     df.set_index('timestamp', inplace=True)
                     return df
-            else:
-                # Optional: show what the response looks like for debugging
-                # st.warning(f"Unexpected response for {symbol}: {data}")
-                pass
         else:
-            # ----- FIX 3: Show actual error -----
-            st.error(f"⚠️ API Error {response.status_code} for {symbol}: {response.text[:200]}")
+            st.error(f"⚠️ History API Error {response.status_code} for {symbol}: {response.text[:200]}")
     except Exception as e:
         st.error(f"❌ Exception for {symbol}: {str(e)}")
     return None
 
 def get_live_quote(symbol):
-    """Corrected Dhan API v2 live quote with error display"""
+    """Corrected Dhan API v2 live quote - FIXED ENDPOINT"""
     try:
-        url = "https://api.dhan.co/v2/quote"
+        # FIX: Changed endpoint from /v2/quote to /v2/equity/quote
+        url = "https://api.dhan.co/v2/equity/quote"
         params = {
             "symbol": symbol,
             "exchangeSegment": "NSE",
@@ -236,7 +230,7 @@ def get_live_quote(symbol):
         st.error(f"❌ Quote exception for {symbol}: {str(e)}")
     return None
 
-# ========== COMPLETE STOCKS LIST (FIXED: M_M -> M&M) ==========
+# ========== COMPLETE STOCKS LIST (M&M fixed) ==========
 ALL_STOCKS = [
     "360ONE", "ABB", "ABCAPITAL", "ADANIENSOL", "ADANIENT", "ADANIGREEN", "ADANIPORTS",
     "ALKEM", "AMBER", "AMBUJACEM", "ANGELONE", "APLAPOLLO", "APOLLOHOSP", "ASHOKLEY",
@@ -254,7 +248,7 @@ ALL_STOCKS = [
     "INFY", "INOXWIND", "IOC", "IREDA", "IRFC", "ITC", "JINDALSTEL", "JIOFIN",
     "JSWENERGY", "JSWSTEEL", "JUBLFOOD", "KALYANKJIL", "KAYNES", "KEI", "KFINTECH",
     "KOTAKBANK", "KPITTECH", "LAURUSLABS", "LICHSGFIN", "LICI", "LODHA", "LT", "LTF",
-    "LUPIN", "M&M",   # <--- FIXED: replaced M_M with M&M
+    "LUPIN", "M&M",   # Fixed
     "MANAPPURAM", "MANKIND", "MARICO", "MARUTI", "MAXHEALTH",
     "MAZDOCK", "MCX", "MFSL", "MOTHERSON", "MPHASIS", "MUTHOOTFIN", "NATIONALUM",
     "NAUKRI", "NBCC", "NESTLEIND", "NHPC", "NMDC", "NTPC", "NUVAMA", "NYKAA",
@@ -270,7 +264,7 @@ ALL_STOCKS = [
     "WIPRO", "YESBANK", "ZYDUSLIFE"
 ]
 
-# ========== TECHNICAL INDICATORS (NO CHANGE) ==========
+# ========== TECHNICAL INDICATORS (same as before - no change) ==========
 def calculate_ema(close, period):
     return close.ewm(span=period, adjust=False).mean()
 
@@ -644,7 +638,6 @@ def scan_all_stocks():
                     signals.append(signal)
         except Exception as e:
             st.error(f"Scan error for {symbol}: {e}")
-        # Small delay to avoid rate limiting
         time.sleep(0.05)
     progress_bar.empty()
     status_text.empty()
@@ -652,7 +645,6 @@ def scan_all_stocks():
     return signals
 
 def get_tradingview_chart(symbol, timeframe="5"):
-    # For M&M symbol, TradingView expects M&M, already correct now.
     return f"""
     <div style="border-radius: 15px; overflow: hidden; background: #0a0a0a; padding: 5px; margin-top: 10px; margin-bottom: 10px;">
         <div class="tradingview-widget-container" style="height:500px;">
