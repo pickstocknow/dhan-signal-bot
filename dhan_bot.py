@@ -60,7 +60,7 @@ st.markdown("""
     .api-status { background: #1a1a1a; border-radius: 10px; padding: 5px 10px; font-size: 12px; display: inline-block; }
     .entry-time { color: #ffaa00; font-size: 14px; font-family: monospace; }
     
-    /* Simple Gainer/Loser Colors - Normal Icons */
+    /* Normal Gainer/Loser - No extra styling */
     .gainer-normal {
         color: #00ff88 !important;
         font-weight: bold;
@@ -69,17 +69,17 @@ st.markdown("""
         color: #ff3333 !important;
         font-weight: bold;
     }
-    .gainers-card-normal {
+    .gainers-card {
         background: linear-gradient(135deg, #0a2a0a 0%, #0a0a0a 100%);
         border-radius: 15px;
-        padding: 15px;
-        margin: 10px 0;
+        padding: 12px;
+        margin: 8px 0;
     }
-    .losers-card-normal {
+    .losers-card {
         background: linear-gradient(135deg, #2a0a0a 0%, #0a0a0a 100%);
         border-radius: 15px;
-        padding: 15px;
-        margin: 10px 0;
+        padding: 12px;
+        margin: 8px 0;
     }
     .highlight-stock {
         border: 2px solid #ffaa00;
@@ -90,19 +90,19 @@ st.markdown("""
         from { box-shadow: 0 0 10px rgba(255, 170, 0, 0.3); }
         to { box-shadow: 0 0 20px rgba(255, 170, 0, 0.8); }
     }
-    /* Mode Button Colors */
-    .test-mode-active {
-        background-color: #ff6600 !important;
-        color: white !important;
-        border: 2px solid #ffaa00 !important;
+    .mode-test {
+        background-color: #ff6600;
+        border: 2px solid #ffaa00;
+        padding: 10px;
+        border-radius: 10px;
+        text-align: center;
     }
-    .live-mode-active {
-        background-color: #00ff88 !important;
-        color: black !important;
-        border: 2px solid #00ff88 !important;
-    }
-    .mode-button {
-        transition: all 0.3s ease;
+    .mode-live {
+        background-color: #00cc66;
+        border: 2px solid #00ff88;
+        padding: 10px;
+        border-radius: 10px;
+        text-align: center;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -129,7 +129,7 @@ if "top_losers" not in st.session_state:
 if "market_trend" not in st.session_state:
     st.session_state.market_trend = "NEUTRAL"
 if "test_mode" not in st.session_state:
-    st.session_state.test_mode = True  # Default Test Mode ON
+    st.session_state.test_mode = True
 
 # ========== LOGIN FUNCTION ==========
 def show_login():
@@ -361,7 +361,7 @@ def detect_candle_patterns(df):
     
     return patterns
 
-# ========== GENERATE SIGNAL WITH TEST MODE ==========
+# ========== GENERATE SIGNAL ==========
 def generate_high_accuracy_signal(df, symbol=None):
     if st.session_state.test_mode:
         test_symbols = ["RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "BHARTIARTL", "KOTAKBANK", "BAJFINANCE", "ITC"]
@@ -618,36 +618,34 @@ def main():
     st.markdown("<h1>🎯 90% ACCURACY SIGNAL BOT</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #ffaa00;'>SMC | EMA | RSI | MACD | VWAP | ADX | FYERS Live Data</p>", unsafe_allow_html=True)
     
-    # ========== TEST MODE / LIVE MODE TOGGLE BUTTONS WITH COLOR CHANGE ==========
+    # ========== TEST MODE / LIVE MODE BUTTONS ==========
     col_mode1, col_mode2, col_mode3 = st.columns([1, 1, 2])
     
     with col_mode1:
-        test_btn = st.button("🧪 TEST MODE", key="test_mode_btn", use_container_width=True)
-        if test_btn:
+        if st.button("🧪 TEST MODE", key="test_mode_btn", use_container_width=True):
             st.session_state.test_mode = True
             st.session_state.signals = []
             st.session_state.last_scan = None
             st.rerun()
     
     with col_mode2:
-        live_btn = st.button("📡 LIVE MARKET", key="live_mode_btn", use_container_width=True)
-        if live_btn:
+        if st.button("📡 LIVE MARKET", key="live_mode_btn", use_container_width=True):
             st.session_state.test_mode = False
             st.session_state.signals = []
             st.session_state.last_scan = None
             st.rerun()
     
-    # Show current mode with dynamic color
+    # Show current mode
     if st.session_state.test_mode:
         st.markdown("""
-        <div style="background-color:#ff660020; border:2px solid #ff6600; padding:15px; border-radius:15px; margin:10px 0; text-align:center;">
-            <span style="color:#ffaa00; font-size:18px; font-weight:bold;">🧪 TEST MODE ACTIVE - Showing demo signals for UI testing</span>
+        <div style="background-color:#ff660020; border:2px solid #ff6600; padding:12px; border-radius:10px; margin:10px 0; text-align:center;">
+            <span style="color:#ffaa00; font-size:16px; font-weight:bold;">🧪 TEST MODE ACTIVE - Showing demo signals for UI testing</span>
         </div>
         """, unsafe_allow_html=True)
     else:
         st.markdown("""
-        <div style="background-color:#00ff8820; border:2px solid #00ff88; padding:15px; border-radius:15px; margin:10px 0; text-align:center;">
-            <span style="color:#00ff88; font-size:18px; font-weight:bold;">📡 LIVE MARKET MODE - Real data from FYERS API</span>
+        <div style="background-color:#00ff8820; border:2px solid #00ff88; padding:12px; border-radius:10px; margin:10px 0; text-align:center;">
+            <span style="color:#00ff88; font-size:16px; font-weight:bold;">📡 LIVE MARKET MODE - Real data from FYERS API</span>
         </div>
         """, unsafe_allow_html=True)
     
@@ -670,7 +668,7 @@ def main():
     
     st.markdown("---")
     
-    # ========== TOP GAINERS & LOSERS SECTION (Normal Icons) ==========
+    # ========== TOP GAINERS & LOSERS SECTION ==========
     st.markdown("<h2>📊 TOP 5 GAINERS & LOSERS</h2>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -697,11 +695,11 @@ def main():
                 
                 if has_high_signal:
                     st.markdown(f"""
-                    <div class='gainers-card-normal highlight-stock'>
+                    <div class='gainers-card highlight-stock'>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <h3>📈 {stock['symbol']}</h3>
                             <div style="text-align: right;">
-                                <div class='high-probability' style="margin-bottom: 5px;">🔥 {high_prob:.0f}%</div>
+                                <div class='probability-high' style="margin-bottom: 5px; padding: 4px 12px;">🔥 {high_prob:.0f}%</div>
                                 <div class='gainer-normal'>+{stock['change_percent']:.2f}%</div>
                             </div>
                         </div>
@@ -710,7 +708,7 @@ def main():
                     """, unsafe_allow_html=True)
                 else:
                     st.markdown(f"""
-                    <div class='gainers-card-normal'>
+                    <div class='gainers-card'>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <h3>📈 {stock['symbol']}</h3>
                             <div class='gainer-normal'>+{stock['change_percent']:.2f}%</div>
@@ -735,11 +733,11 @@ def main():
                 
                 if has_high_signal:
                     st.markdown(f"""
-                    <div class='losers-card-normal highlight-stock'>
+                    <div class='losers-card highlight-stock'>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <h3>📉 {stock['symbol']}</h3>
                             <div style="text-align: right;">
-                                <div class='high-probability' style="margin-bottom: 5px;">🔥 {high_prob:.0f}%</div>
+                                <div class='probability-high' style="margin-bottom: 5px; padding: 4px 12px;">🔥 {high_prob:.0f}%</div>
                                 <div class='loser-normal'>{stock['change_percent']:.2f}%</div>
                             </div>
                         </div>
@@ -748,7 +746,7 @@ def main():
                     """, unsafe_allow_html=True)
                 else:
                     st.markdown(f"""
-                    <div class='losers-card-normal'>
+                    <div class='losers-card'>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <h3>📉 {stock['symbol']}</h3>
                             <div class='loser-normal'>{stock['change_percent']:.2f}%</div>
@@ -761,7 +759,7 @@ def main():
     
     st.markdown("---")
     
-    # ========== SIDEBAR CONTROLS ==========
+    # ========== SIDEBAR ==========
     with st.sidebar:
         st.markdown("## ⚙️ CONTROLS")
         st.markdown("---")
@@ -820,14 +818,13 @@ def main():
     
     st.markdown("---")
     
-    # ========== DISPLAY SIGNALS WITH CHARTS ==========
+    # ========== DISPLAY SIGNALS ==========
     if st.session_state.signals:
         buy_signals = [s for s in st.session_state.signals if s['signal'] == 'STRONG_BUY']
         sell_signals = [s for s in st.session_state.signals if s['signal'] == 'STRONG_SELL']
         
-        # BUY SIGNALS
         if buy_signals:
-            st.markdown("<h2>🟢 STRONG BUY SIGNALS (High Probability)</h2>", unsafe_allow_html=True)
+            st.markdown("<h2>🟢 STRONG BUY SIGNALS</h2>", unsafe_allow_html=True)
             for idx, sig in enumerate(buy_signals[:10]):
                 highlight_class = "highlight-stock" if sig['probability'] >= 85 else ""
                 
@@ -870,9 +867,8 @@ def main():
                     st.components.v1.html(chart_html, height=550)
                 st.markdown("---")
         
-        # SELL SIGNALS
         if sell_signals:
-            st.markdown("<h2>🔴 STRONG SELL SIGNALS (High Probability)</h2>", unsafe_allow_html=True)
+            st.markdown("<h2>🔴 STRONG SELL SIGNALS</h2>", unsafe_allow_html=True)
             for idx, sig in enumerate(sell_signals[:10]):
                 highlight_class = "highlight-stock" if sig['probability'] >= 85 else ""
                 
