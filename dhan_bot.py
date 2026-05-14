@@ -11,7 +11,7 @@ warnings.filterwarnings('ignore')
 
 # =================== ⚙️ EXCEL SETTINGS (CHANGE THIS) ===================
 # 🔴 IMPORTANT: इन वैल्यूज़ को अपनी Excel फाइल के हिसाब से जरूर बदलें!
-EXCEL_FILE_PATH = r"C:\Users\User\Desktop\LiveData.xlsm"   # आपकी Excel फाइल का पूरा रास्ता
+EXCEL_FILE_PATH = "C:\Users\User\Desktop\LiveData.xlsm"   # आपकी Excel फाइल का पूरा रास्ता
 SHEET_NAME = "Sheet1"                                      # Sheet का नाम
 SYMBOL_COL = "A"                                           # जिस कॉलम में TICKER/SYMBOL है
 LTP_COL = "E"                                              # जिस कॉलम में LTP है (Last Traded Price)
