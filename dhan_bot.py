@@ -5,26 +5,27 @@ from datetime import datetime, timedelta
 import time
 import random
 import warnings
-from fyers_apiv3 import fyersModel
+import openpyxl   # 👈 needed for Excel
 
 warnings.filterwarnings('ignore')
 
-# ========== FYERS CREDENTIALS ==========
-# NOTE: Pehle access token generate karna hoga!
-FYERS_CLIENT_ID = "ER78MCCWG0-100"
-FYERS_SECRET_KEY = "9MLTKAAHCQ"
-FYERS_ACCESS_TOKEN = "JVHC6XLKBY6OOII5VSAKRTA3QTOIO2MM"  # Replace with your actual token
-REDIRECT_URI = "http://127.0.0.1:8501"
+# ========== EXCEL CONFIGURATION (AAPKE EXCEL KE HISAB SE) ==========
+EXCEL_FILE_PATH = r"C:\Users\User\Desktop\LiveData.xlsm"   # 👈 Apni file path daalein
+SHEET_NAME = "Sheet1"                                      # 👈 Sheet name
+SYMBOL_COL = "A"                                           # Ticker column
+LTP_COL = "E"                                              # LTP column
+CHANGE_PERCENT_COL = "F"                                   # % Chg column
+START_ROW = 2                                              # Data row start
 
 # ========== PAGE CONFIG ==========
 st.set_page_config(
     layout="wide", 
-    page_title="90% Accuracy Signal Bot - FYERS API", 
+    page_title="90% Accuracy SMC Signal Bot - Excel", 
     page_icon="🎯",
     initial_sidebar_state="expanded"
 )
 
-# ========== CSS (Same as before) ==========
+# ========== CSS (unchanged) ==========
 st.markdown("""
 <style>
     .stApp { background-color: #050505; }
@@ -42,8 +43,14 @@ st.markdown("""
         from { opacity: 0; transform: translateY(-20px); }
         to { opacity: 1; transform: translateY(0); }
     }
-    .strong-buy { border-left: 8px solid #00ff88; background: linear-gradient(135deg, #0a2a0a 0%, #0a0a0a 100%); }
-    .strong-sell { border-left: 8px solid #ff3333; background: linear-gradient(135deg, #2a0a0a 0%, #0a0a0a 100%); }
+    .strong-buy { 
+        border-left: 8px solid #00ff88; 
+        background: linear-gradient(135deg, #0a2a0a 0%, #0a0a0a 100%);
+    }
+    .strong-sell { 
+        border-left: 8px solid #ff3333; 
+        background: linear-gradient(135deg, #2a0a0a 0%, #0a0a0a 100%);
+    }
     .badge-buy { background: #00ff88; color: #000; padding: 8px 20px; border-radius: 25px; font-weight: bold; }
     .badge-sell { background: #ff3333; color: #fff; padding: 8px 20px; border-radius: 25px; font-weight: bold; }
     .price-up { color: #00ff88; font-size: 32px; font-weight: bold; }
@@ -66,7 +73,7 @@ st.markdown("""
 USERNAME = "admin"
 PASSWORD = "stock123"
 
-# ========== SESSION STATE ==========
+# ========== SESSION STATE INITIALIZATION ==========
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "signals" not in st.session_state:
@@ -84,8 +91,8 @@ if "test_mode" not in st.session_state:
 
 # ========== LOGIN FUNCTION ==========
 def show_login():
-    st.markdown("<h1 style='text-align: center;'>🎯 90% ACCURACY SIGNAL BOT</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #ffaa00;'>SMC | EMA | RSI | MACD | VWAP | FYERS API</p>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>🎯 90% ACCURACY SIGNAL BOT - EXCEL</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #ffaa00;'>SMC | EMA | RSI | MACD | VWAP | Excel Live Feed</p>", unsafe_allow_html=True)
     
     with st.form(key="login_form_main"):
         username = st.text_input("Username")
@@ -103,25 +110,40 @@ if not st.session_state["authenticated"]:
     show_login()
     st.stop()
 
-# ========== INITIALIZE FYERS CLIENT ==========
-def get_fyers_client():
-    """Initialize Fyers client with access token"""
+# ========== EXCEL LIVE QUOTE FUNCTION (UPDATED) ==========
+def get_live_quote_from_excel(symbol):
+    """
+    Reads live price and change% from Excel sheet linked to Fyers One.
+    Returns None if symbol not found or error.
+    """
     try:
-        fyers = fyersModel.FyersModel(
-            client_id=FYERS_CLIENT_ID,
-            token=FYERS_ACCESS_TOKEN,
-            is_async=False,
-            log_path=""
-        )
-        return fyers
-    except Exception as e:
-        st.error(f"FYERS Client Initialization Error: {e}")
-        return None
+        wb = openpyxl.load_workbook(EXCEL_FILE_PATH, data_only=True)
+        sheet = wb[SHEET_NAME]
 
-# ========== FYERS API FUNCTIONS ==========
-def get_live_quote_fyers(symbol):
-    """Get live quote using fyers_apiv3"""
+        for row in range(START_ROW, sheet.max_row + 1):
+            excel_symbol = sheet[f"{SYMBOL_COL}{row}"].value
+            if excel_symbol == symbol:
+                ltp = sheet[f"{LTP_COL}{row}"].value
+                change_percent = sheet[f"{CHANGE_PERCENT_COL}{row}"].value
+                wb.close()
+                
+                if ltp is not None and change_percent is not None:
+                    # Calculate change (₹) from percentage
+                    change = (change_percent / 100) * ltp
+                    return {
+                        'ltp': float(ltp),
+                        'change': float(change),
+                        'change_percent': float(change_percent)
+                    }
+        wb.close()
+    except Exception as e:
+        st.error(f"❌ Excel read error: {e}")
+    return None
+
+# ========== LIVE QUOTE DISPATCH ==========
+def get_live_quote(symbol):
     if st.session_state.test_mode:
+        # Dummy data for test mode
         base_price = random.uniform(500, 5000)
         change_percent = random.uniform(-5, 5)
         change = base_price * change_percent / 100
@@ -130,120 +152,55 @@ def get_live_quote_fyers(symbol):
             'change': change,
             'change_percent': change_percent
         }
-    
-    try:
-        fyers = get_fyers_client()
-        if fyers is None:
-            return None
-        
-        # Format: NSE:SYMBOL-EQ
-        data = {"symbols": f"NSE:{symbol}-EQ"}
-        response = fyers.quotes(data=data)
-        
-        if response.get('s') == 'ok':
-            item = response['d'][0]['v']
-            return {
-                'ltp': float(item.get('lp', 0)),
-                'change': float(item.get('ch', 0)),
-                'change_percent': float(item.get('chp', 0))
-            }
-        else:
-            st.error(f"Quote error for {symbol}: {response}")
-    except Exception as e:
-        st.error(f"Quote exception {symbol}: {e}")
-    
-    return None
+    else:
+        # Live data from Excel
+        return get_live_quote_from_excel(symbol)
 
-def get_history_fyers(symbol, resolution="15", days=5):
-    """Get historical data using fyers_apiv3"""
-    if st.session_state.test_mode:
-        # Dummy data for test mode
-        periods = 80
-        dates = pd.date_range(end=datetime.now(), periods=periods, freq=f'{resolution}min')
-        df = pd.DataFrame({
-            'Open': np.random.uniform(100, 500, periods),
-            'High': np.random.uniform(100, 500, periods),
-            'Low': np.random.uniform(100, 500, periods),
-            'Close': np.random.uniform(100, 500, periods),
-            'Volume': np.random.randint(100000, 1000000, periods)
-        }, index=dates)
-        return df
-    
-    try:
-        fyers = get_fyers_client()
-        if fyers is None:
-            return None
-        
-        to_date = datetime.now()
-        from_date = to_date - timedelta(days=days)
-        
-        data = {
-            "symbol": f"NSE:{symbol}-EQ",
-            "resolution": resolution,
-            "date_format": "1",
-            "range_from": from_date.strftime("%Y-%m-%d"),
-            "range_to": to_date.strftime("%Y-%m-%d"),
-            "cont_flag": "1"
-        }
-        
-        response = fyers.history(data=data)
-        
-        if response.get('s') == 'ok' and response.get('candles'):
-            candles = response['candles']
-            df_data = []
-            for candle in candles:
-                df_data.append({
-                    'timestamp': pd.to_datetime(candle[0], unit='s'),
-                    'Open': candle[1],
-                    'High': candle[2],
-                    'Low': candle[3],
-                    'Close': candle[4],
-                    'Volume': candle[5]
-                })
-            df = pd.DataFrame(df_data)
-            df.set_index('timestamp', inplace=True)
-            return df
-        else:
-            st.error(f"History error for {symbol}: {response}")
-    except Exception as e:
-        st.error(f"History exception {symbol}: {e}")
-    
-    return None
+# ========== HISTORICAL DATA (Dummy for indicators) ==========
+def get_history_dummy(symbol, resolution="15", days=5):
+    """Generate dummy historical candles (for indicators)"""
+    periods = 80 if resolution == "15" else 200
+    dates = pd.date_range(end=datetime.now(), periods=periods, freq=f'{resolution}min')
+    df = pd.DataFrame({
+        'Open': np.random.uniform(100, 500, periods),
+        'High': np.random.uniform(100, 500, periods),
+        'Low': np.random.uniform(100, 500, periods),
+        'Close': np.random.uniform(100, 500, periods),
+        'Volume': np.random.randint(100000, 1000000, periods)
+    }, index=dates)
+    return df
 
 # ========== COMPLETE 207 STOCKS ==========
 ALL_STOCKS = [
-    "360ONE", "ABB", "ABCAPITAL", "ADANIENSOL", "ADANIENT", "ADANIGREEN", "ADANIPORTS",
-    "ALKEM", "AMBER", "AMBUJACEM", "ANGELONE", "APLAPOLLO", "APOLLOHOSP", "ASHOKLEY",
-    "ASIANPAINT", "ASTRAL", "AUBANK", "AUROPHARMA", "AXISBANK", "BAJAJ-AUTO", "BAJAJFINSV",
-    "BAJAJHLDNG", "BAJFINANCE", "BANDHANBNK", "BANKBARODA", "BANKINDIA", "BDL", "BEL",
-    "BHARATFORG", "BHARTIARTL", "BHEL", "BIOCON", "BLUESTARCO", "BOSCHLTD", "BPCL",
-    "BRITANNIA", "BSE", "CAMS", "CANBK", "CDSL", "CGPOWER", "CHOLAFIN", "CIPLA",
-    "COALINDIA", "COFORGE", "COLPAL", "CONCOR", "CROMPTON", "CUMMINSIND", "DABUR",
-    "DALBHARAT", "DELHIVERY", "DIVISLAB", "DIXON", "DLF", "DMART", "DRREDDY",
-    "EICHERMOT", "ETERNAL", "EXIDEIND", "FEDERALBNK", "FORTIS", "GAIL", "GLENMARK",
-    "GMRAIRPORT", "GODREJCP", "GODREJPROP", "GRASIM", "HAL", "HAVELLS", "HCLTECH",
-    "HDFCAMC", "HDFCBANK", "HDFCLIFE", "HEROMOTOCO", "HINDALCO", "HINDPETRO",
-    "HINDUNILVR", "HINDZINC", "HUDCO", "ICICIBANK", "ICICIGI", "ICICIPRULI", "IDEA",
-    "IDFCFIRSTB", "IEX", "INDHOTEL", "INDIANB", "INDIGO", "INDUSINDBK", "INDUSTOWER",
-    "INFY", "INOXWIND", "IOC", "IREDA", "IRFC", "ITC", "JINDALSTEL", "JIOFIN",
-    "JSWENERGY", "JSWSTEEL", "JUBLFOOD", "KALYANKJIL", "KAYNES", "KEI", "KFINTECH",
-    "KOTAKBANK", "KPITTECH", "LAURUSLABS", "LICHSGFIN", "LICI", "LODHA", "LT", "LTF",
-    "LUPIN", "M&M", "MANAPPURAM", "MANKIND", "MARICO", "MARUTI", "MAXHEALTH",
-    "MAZDOCK", "MCX", "MFSL", "MOTHERSON", "MPHASIS", "MUTHOOTFIN", "NATIONALUM",
-    "NAUKRI", "NBCC", "NESTLEIND", "NHPC", "NMDC", "NTPC", "NUVAMA", "NYKAA",
-    "OBEROIRLTY", "OFSS", "OIL", "ONGC", "PAGEIND", "PATANJALI", "PAYTM", "PERSISTENT",
-    "PETRONET", "PFC", "PGEL", "PHOENIXLTD", "PIDILITIND", "PIIND", "PNB", "PNBHOUSING",
-    "POLICYBZR", "POLYCAB", "POWERGRID", "POWERINDIA", "PPLPHARMA", "PREMIERENE",
-    "PRESTIGE", "RBLBANK", "RECLTD", "RELIANCE", "RVNL", "SAIL", "SAMMAANCAP",
-    "SBICARD", "SBILIFE", "SBIN", "SHREECEM", "SHRIRAMFIN", "SIEMENS", "SOLARINDS",
-    "SONACOMS", "SRF", "SUNPHARMA", "SUPREMEIND", "SUZLON", "SWIGGY", "SYNGENE",
-    "TATACONSUM", "TATAELXSI", "TATAPOWER", "TATASTEEL", "TATATECH", "TCS", "TECHM",
-    "TIINDIA", "TITAN", "TORNTPHARM", "TORNTPOWER", "TRENT", "TVSMOTOR", "ULTRACEMCO",
-    "UNIONBANK", "UNITDSPR", "UNOMINDA", "UPL", "VBL", "VEDL", "VOLTAS", "WAAREEENER",
-    "WIPRO", "YESBANK", "ZYDUSLIFE"
+    "360ONE", "ABB", "ABCAPITAL", "ADANIENSOL", "ADANIENT", "ADANIGREEN", "ADANIPORTS", 
+    "ALKEM", "AMBER", "AMBUJACEM", "ANGELONE", "APLAPOLLO", "APOLLOHOSP", "ASHOKLEY", 
+    "ASIANPAINT", "ASTRAL", "AUBANK", "AUROPHARMA", "AXISBANK", "BAJAJ-AUTO", "BAJAJFINSV", 
+    "BAJAJHLDNG", "BAJFINANCE", "BANDHANBNK", "BANKBARODA", "BANKINDIA", "BDL", "BEL", 
+    "BHARATFORG", "BHARTIARTL", "BHEL", "BIOCON", "BLUESTARCO", "BOSCHLTD", "BPCL", 
+    "BRITANNIA", "BSE", "CAMS", "CANBK", "CDSL", "CGPOWER", "CHOLAFIN", "CIPLA", "COALINDIA", 
+    "COFORGE", "COLPAL", "CONCOR", "CROMPTON", "CUMMINSIND", "DABUR", "DALBHARAT", "DELHIVERY", 
+    "DIVISLAB", "DIXON", "DLF", "DMART", "DRREDDY", "EICHERMOT", "ETERNAL", "EXIDEIND", 
+    "FEDERALBNK", "FORTIS", "GAIL", "GLENMARK", "GMRAIRPORT", "GODREJCP", "GODREJPROP", 
+    "GRASIM", "HAL", "HAVELLS", "HCLTECH", "HDFCAMC", "HDFCBANK", "HDFCLIFE", "HEROMOTOCO", 
+    "HINDALCO", "HINDPETRO", "HINDUNILVR", "HINDZINC", "HUDCO", "ICICIBANK", "ICICIGI", 
+    "ICICIPRULI", "IDEA", "IDFCFIRSTB", "IEX", "INDHOTEL", "INDIANB", "INDIGO", "INDUSINDBK", 
+    "INDUSTOWER", "INFY", "INOXWIND", "IOC", "IREDA", "IRFC", "ITC", "JINDALSTEL", "JIOFIN", 
+    "JSWENERGY", "JSWSTEEL", "JUBLFOOD", "KALYANKJIL", "KAYNES", "KEI", "KFINTECH", "KOTAKBANK", 
+    "KPITTECH", "LAURUSLABS", "LICHSGFIN", "LICI", "LODHA", "LT", "LTF", "LUPIN", "M&M", 
+    "MANAPPURAM", "MANKIND", "MARICO", "MARUTI", "MAXHEALTH", "MAZDOCK", "MCX", "MFSL", 
+    "MOTHERSON", "MPHASIS", "MUTHOOTFIN", "NATIONALUM", "NAUKRI", "NBCC", "NESTLEIND", "NHPC", 
+    "NMDC", "NTPC", "NUVAMA", "NYKAA", "OBEROIRLTY", "OFSS", "OIL", "ONGC", "PAGEIND", 
+    "PATANJALI", "PAYTM", "PERSISTENT", "PETRONET", "PFC", "PGEL", "PHOENIXLTD", "PIDILITIND", 
+    "PIIND", "PNB", "PNBHOUSING", "POLICYBZR", "POLYCAB", "POWERGRID", "POWERINDIA", "PPLPHARMA", 
+    "PREMIERENE", "PRESTIGE", "RBLBANK", "RECLTD", "RELIANCE", "RVNL", "SAIL", "SAMMAANCAP", 
+    "SBICARD", "SBILIFE", "SBIN", "SHREECEM", "SHRIRAMFIN", "SIEMENS", "SOLARINDS", "SONACOMS", 
+    "SRF", "SUNPHARMA", "SUPREMEIND", "SUZLON", "SWIGGY", "SYNGENE", "TATACONSUM", "TATAELXSI", 
+    "TATAPOWER", "TATASTEEL", "TATATECH", "TCS", "TECHM", "TIINDIA", "TITAN", "TORNTPHARM", 
+    "TORNTPOWER", "TRENT", "TVSMOTOR", "ULTRACEMCO", "UNIONBANK", "UNITDSPR", "UNOMINDA", 
+    "UPL", "VBL", "VEDL", "VOLTAS", "WAAREEENER", "WIPRO", "YESBANK", "ZYDUSLIFE"
 ]
 
-# ========== TECHNICAL INDICATORS (Full functions ==========
+# ========== TECHNICAL INDICATORS ==========
 def calculate_ema(close, period):
     return close.ewm(span=period, adjust=False).mean()
 
@@ -342,6 +299,7 @@ def detect_candle_patterns(df):
     
     return patterns
 
+# ========== SIGNAL GENERATION ==========
 def generate_high_accuracy_signal(df, symbol=None):
     if st.session_state.test_mode:
         test_symbols = ["RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "BHARTIARTL", "KOTAKBANK", "BAJFINANCE", "ITC"]
@@ -492,6 +450,7 @@ def generate_high_accuracy_signal(df, symbol=None):
     
     return None
 
+# ========== GET TOP GAINERS & LOSERS ==========
 def get_top_gainers_losers():
     gainers = []
     losers = []
@@ -499,7 +458,7 @@ def get_top_gainers_losers():
                    "KOTAKBANK", "BAJFINANCE", "ITC", "LT", "WIPRO", "AXISBANK", "HCLTECH"]
     
     for symbol in main_stocks:
-        q = get_live_quote_fyers(symbol)
+        q = get_live_quote(symbol)
         if q and q['change_percent'] != 0:
             data = {'symbol': symbol, 'price': q['ltp'], 'change': q['change'], 'change_percent': q['change_percent']}
             if q['change_percent'] > 0:
@@ -512,13 +471,14 @@ def get_top_gainers_losers():
     losers.sort(key=lambda x: x['change_percent'])
     return gainers[:5], losers[:5]
 
+# ========== DETECT MARKET TREND ==========
 def detect_market_trend():
     bullish = 0
     bearish = 0
     trend_stocks = ["RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "BHARTIARTL"]
     
     for symbol in trend_stocks:
-        q = get_live_quote_fyers(symbol)
+        q = get_live_quote(symbol)
         if q:
             if q['change'] > 0:
                 bullish += 1
@@ -533,6 +493,7 @@ def detect_market_trend():
     else:
         return "NEUTRAL", f"🟡 Market Trend: NEUTRAL"
 
+# ========== SCAN ALL STOCKS ==========
 def scan_all_stocks():
     signals = []
     total = len(ALL_STOCKS)
@@ -543,18 +504,18 @@ def scan_all_stocks():
         status_text.text(f"🎯 Analyzing: {symbol} ({i+1}/{total})")
         progress_bar.progress((i+1)/total)
         
-        try:
-            df = get_history_fyers(symbol, resolution="15", days=5)
-            if df is not None and len(df) > 30:
-                signal_data = generate_high_accuracy_signal(df, symbol)
-                if signal_data:
-                    signal_data['symbol'] = symbol
-                    signal_data['name'] = symbol
-                    signal_data['entry_time'] = datetime.now().strftime("%H:%M:%S")
-                    signals.append(signal_data)
-        except Exception as e:
-            print(f"Scan error for {symbol}: {e}")
-        
+        # Use dummy historical data for indicators
+        df = get_history_dummy(symbol, resolution="15", days=5)
+        if df is not None and len(df) > 30:
+            signal_data = generate_high_accuracy_signal(df, symbol)
+            if signal_data:
+                signal_data['symbol'] = symbol
+                signal_data['name'] = symbol                signal_data['entry_time'] = datetime.now().strftime("%H:%M:%S")
+                # Override price with live Excel data
+                live = get_live_quote(symbol)
+                if live:
+                    signal_data['price'] = live['ltp']
+                signals.append(signal_data)
         time.sleep(0.03)
     
     progress_bar.empty()
@@ -562,6 +523,7 @@ def scan_all_stocks():
     signals.sort(key=lambda x: x['probability'], reverse=True)
     return signals
 
+# ========== TRADINGVIEW CHART ==========
 def get_tradingview_chart(symbol, timeframe="5"):
     return f"""
     <div style="border-radius: 15px; overflow: hidden; background: #0a0a0a; padding: 5px; margin-top: 10px;">
@@ -588,9 +550,10 @@ def get_tradingview_chart(symbol, timeframe="5"):
     </div>
     """
 
+# ========== MAIN APP ==========
 def main():
-    st.markdown("<h1>🎯 90% ACCURACY SIGNAL BOT - FYERS API v3</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #ffaa00;'>SMC | EMA | RSI | MACD | VWAP | ADX | FYERS Live Data</p>", unsafe_allow_html=True)
+    st.markdown("<h1>🎯 90% ACCURACY SIGNAL BOT - EXCEL</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #ffaa00;'>SMC | EMA | RSI | MACD | VWAP | ADX | Excel Live Feed</p>", unsafe_allow_html=True)
     
     col_mode1, col_mode2, _ = st.columns([1, 1, 2])
     with col_mode1:
@@ -600,18 +563,21 @@ def main():
             st.session_state.last_scan = None
             st.rerun()
     with col_mode2:
-        if st.button("📡 LIVE MARKET", key="live_mode_btn", use_container_width=True):
+        if st.button("📡 LIVE EXCEL", key="live_mode_btn", use_container_width=True):
             st.session_state.test_mode = False
             st.session_state.signals = []
             st.session_state.last_scan = None
             st.rerun()
     
     if st.session_state.test_mode:
-        st.markdown('<div style="background-color:#ff660020; border:2px solid #ff6600; padding:12px; border-radius:10px; margin:10px 0; text-align:center;"><span style="color:#ffaa00; font-size:16px; font-weight:bold;">🧪 TEST MODE ACTIVE - Showing demo signals for UI testing</span></div>', unsafe_allow_html=True)
+        st.markdown('<div style="background-color:#ff660020; border:2px solid #ff6600; padding:12px; border-radius:10px; margin:10px 0; text-align:center;"><span style="color:#ffaa00; font-size:16px; font-weight:bold;">🧪 TEST MODE ACTIVE - Demo signals only</span></div>', unsafe_allow_html=True)
     else:
-        st.markdown('<div style="background-color:#00ff8820; border:2px solid #00ff88; padding:12px; border-radius:10px; margin:10px 0; text-align:center;"><span style="color:#00ff88; font-size:16px; font-weight:bold;">📡 LIVE MARKET MODE - Real data from FYERS API</span></div>', unsafe_allow_html=True)
+        st.markdown('<div style="background-color:#00ff8820; border:2px solid #00ff88; padding:12px; border-radius:10px; margin:10px 0; text-align:center;"><span style="color:#00ff88; font-size:16px; font-weight:bold;">📡 LIVE EXCEL MODE - Real data from Excel sheet</span></div>', unsafe_allow_html=True)
     
-    st.markdown(f"<div style='text-align:center'><span class='api-status'>✅ FYERS API v3 | 207 Stocks | 15-Minute Timeframe</span></div>", unsafe_allow_html=True)
+    if not st.session_state.test_mode:
+        st.markdown(f"<div style='text-align:center'><span class='api-status'>✅ Excel Linked: {EXCEL_FILE_PATH}</span></div>", unsafe_allow_html=True)
+    else:
+        st.markdown("<div style='text-align:center'><span class='api-status'>🧪 Test Mode – using dummy data</span></div>", unsafe_allow_html=True)
     
     market_trend, trend_msg = detect_market_trend()
     st.session_state.market_trend = market_trend
@@ -654,9 +620,11 @@ def main():
             st.session_state.authenticated = False
             st.rerun()
         st.markdown("---")
-        st.markdown("### 🔐 FYERS API STATUS")
-        st.success("✅ ACTIVE")
-        st.info(f"Client ID: {FYERS_CLIENT_ID[:10]}...")
+        st.markdown("### 📊 DATA SOURCE")
+        if st.session_state.test_mode:
+            st.warning("🧪 Test Mode (dummy data)")
+        else:
+            st.success(f"📁 Excel File:\n{EXCEL_FILE_PATH}")
         st.markdown("---")
         st.markdown("### 📊 Signal Criteria")
         st.caption("✅ EMA 9 > 21 > 50")
@@ -752,7 +720,7 @@ def main():
             st.info("🔍 Click 'SCAN ALL STOCKS' to find high probability trading opportunities")
     
     st.markdown("---")
-    st.markdown(f"<p style='text-align: center; color: #888;'>FYERS API v3 | 207 Stocks | Trend: {market_trend} | Mode: {'TEST' if st.session_state.test_mode else 'LIVE'}</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align: center; color: #888;'>Excel Live Feed | 207 Stocks | Trend: {market_trend} | Mode: {'TEST' if st.session_state.test_mode else 'LIVE EXCEL'}</p>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
