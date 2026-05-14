@@ -1,9 +1,10 @@
-# ============================================
-# 🎯 ADVANCED FYERS ONE + EXCEL LIVE SIGNAL BOT
-# ============================================
+# =========================================================
+# 🚀 ADVANCED AI SIGNAL BOT
+# FYERS ONE + EXCEL + REAL CANDLES + AI FILTER
+# =========================================================
 
-# INSTALL FIRST:
-# pip install streamlit pandas numpy yfinance ta xlwings streamlit-autorefresh requests
+# INSTALL:
+# pip install streamlit pandas numpy yfinance xlwings requests streamlit-autorefresh
 
 import streamlit as st
 import pandas as pd
@@ -16,9 +17,9 @@ import time
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 
-# ============================================
+# =========================================================
 # ⚙️ SETTINGS
-# ============================================
+# =========================================================
 
 EXCEL_FILE_PATH = r"C:\Users\User\Desktop\LiveData.xlsm"
 
@@ -30,9 +31,9 @@ CHANGE_PERCENT_COL = "E"
 
 START_ROW = 2
 
-# ============================================
+# =========================================================
 # 🔔 TELEGRAM SETTINGS
-# ============================================
+# =========================================================
 
 TELEGRAM_ENABLED = False
 
@@ -40,51 +41,51 @@ BOT_TOKEN = "YOUR_BOT_TOKEN"
 
 CHAT_ID = "YOUR_CHAT_ID"
 
-# ============================================
+# =========================================================
 # 📦 STOCK LIST
-# ============================================
+# =========================================================
 
 ALL_STOCKS = [
     "RELIANCE",
     "TCS",
-    "HDFCBANK",
     "INFY",
+    "HDFCBANK",
     "ICICIBANK",
     "SBIN",
     "AXISBANK",
-    "ITC",
-    "LT",
     "BAJFINANCE",
+    "LT",
+    "ITC",
     "BHARTIARTL",
     "KOTAKBANK",
     "WIPRO",
     "HCLTECH",
-    "MARUTI",
     "TATASTEEL",
     "POWERGRID",
+    "SUNPHARMA",
     "NTPC",
-    "ULTRACEMCO",
-    "SUNPHARMA"
+    "MARUTI",
+    "ULTRACEMCO"
 ]
 
-# ============================================
-# 🌐 STREAMLIT PAGE
-# ============================================
+# =========================================================
+# 🌐 STREAMLIT
+# =========================================================
 
 st.set_page_config(
-    page_title="🎯 LIVE AI SIGNAL BOT",
+    page_title="🚀 AI SIGNAL BOT",
     layout="wide"
 )
 
-# ============================================
+# =========================================================
 # 🔄 AUTO REFRESH
-# ============================================
+# =========================================================
 
-st_autorefresh(interval=10000, key="live_refresh")
+st_autorefresh(interval=15000, key="refresh")
 
-# ============================================
+# =========================================================
 # 🎨 CSS
-# ============================================
+# =========================================================
 
 st.markdown("""
 <style>
@@ -96,41 +97,34 @@ color:white;
 
 .buy-box{
 background:#071d0d;
-border-left:6px solid #00ff88;
 padding:20px;
 border-radius:15px;
+border-left:6px solid #00ff88;
 margin:10px 0;
 }
 
 .sell-box{
-background:#240909;
-border-left:6px solid red;
+background:#2a0a0a;
 padding:20px;
 border-radius:15px;
+border-left:6px solid red;
 margin:10px 0;
-}
-
-.metric{
-background:#111;
-padding:10px;
-border-radius:10px;
-text-align:center;
 }
 
 </style>
 """, unsafe_allow_html=True)
 
-# ============================================
+# =========================================================
 # 🔐 LOGIN
-# ============================================
+# =========================================================
 
 USERNAME = "admin"
 PASSWORD = "stock123"
 
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
+if "logged" not in st.session_state:
+    st.session_state.logged = False
 
-if not st.session_state.logged_in:
+if not st.session_state.logged:
 
     st.title("🔐 LOGIN")
 
@@ -140,16 +134,17 @@ if not st.session_state.logged_in:
     if st.button("Login"):
 
         if user == USERNAME and pwd == PASSWORD:
-            st.session_state.logged_in = True
+            st.session_state.logged = True
             st.rerun()
+
         else:
             st.error("Wrong Username/Password")
 
     st.stop()
 
-# ============================================
+# =========================================================
 # 📡 EXCEL LIVE DATA
-# ============================================
+# =========================================================
 
 def get_live_quote(symbol):
 
@@ -165,11 +160,11 @@ def get_live_quote(symbol):
 
         for row in range(START_ROW, last_row + 1):
 
-            excel_symbol = sheet.range(
+            sym = sheet.range(
                 f"{SYMBOL_COL}{row}"
             ).value
 
-            if str(excel_symbol).strip().upper() == symbol:
+            if str(sym).strip().upper() == symbol:
 
                 ltp = sheet.range(
                     f"{LTP_COL}{row}"
@@ -194,18 +189,18 @@ def get_live_quote(symbol):
 
         return None
 
-# ============================================
-# 📈 REAL MARKET CANDLES
-# ============================================
+# =========================================================
+# 📈 REAL MARKET DATA
+# =========================================================
 
-def get_history(symbol):
+def get_history(symbol, interval="15m"):
 
     try:
 
         df = yf.download(
             f"{symbol}.NS",
             period="5d",
-            interval="15m",
+            interval=interval,
             progress=False
         )
 
@@ -216,9 +211,9 @@ def get_history(symbol):
     except:
         return None
 
-# ============================================
+# =========================================================
 # 📊 INDICATORS
-# ============================================
+# =========================================================
 
 def EMA(series, period):
 
@@ -240,18 +235,75 @@ def RSI(series, period=14):
 
     return 100 - (100 / (1 + rs))
 
-# ============================================
-# 🚀 SIGNAL LOGIC
-# ============================================
+# =========================================================
+# 🕯️ CANDLE PATTERNS
+# =========================================================
 
-def generate_signal(df):
+def bullish_engulfing(df):
 
-    if df is None or len(df) < 50:
+    prev = df.iloc[-2]
+
+    curr = df.iloc[-1]
+
+    return (
+        prev["Close"] < prev["Open"]
+        and curr["Close"] > curr["Open"]
+        and curr["Close"] > prev["Open"]
+        and curr["Open"] < prev["Close"]
+    )
+
+def bearish_engulfing(df):
+
+    prev = df.iloc[-2]
+
+    curr = df.iloc[-1]
+
+    return (
+        prev["Close"] > prev["Open"]
+        and curr["Close"] < curr["Open"]
+        and curr["Open"] > prev["Close"]
+        and curr["Close"] < prev["Open"]
+    )
+
+# =========================================================
+# 📲 TELEGRAM ALERT
+# =========================================================
+
+def send_telegram(msg):
+
+    if not TELEGRAM_ENABLED:
+        return
+
+    try:
+
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+
+        requests.post(
+            url,
+            data={
+                "chat_id": CHAT_ID,
+                "text": msg
+            }
+        )
+
+    except:
+        pass
+
+# =========================================================
+# 🚀 AI SIGNAL ENGINE
+# =========================================================
+
+def generate_signal(df15, df5):
+
+    if df15 is None or df5 is None:
         return None
 
-    close = df["Close"]
+    if len(df15) < 50:
+        return None
 
-    volume = df["Volume"]
+    close = df15["Close"]
+
+    volume = df15["Volume"]
 
     ema9 = EMA(close, 9)
 
@@ -265,26 +317,59 @@ def generate_signal(df):
 
     latest_rsi = rsi.iloc[-1]
 
-    latest_vol = volume.iloc[-1]
+    latest_volume = volume.iloc[-1]
 
-    avg_vol = volume.tail(20).mean()
+    avg_volume = volume.tail(20).mean()
 
-    volume_boost = latest_vol > avg_vol * 1.5
+    volume_boost = latest_volume > avg_volume * 1.5
 
-    # =========================
+    # =====================================================
+    # OPEN = LOW
+    # =====================================================
+
+    open_low = (
+        abs(df15["Open"].iloc[-1] - df15["Low"].iloc[-1]) < 0.05
+    )
+
+    # =====================================================
+    # OPEN = HIGH
+    # =====================================================
+
+    open_high = (
+        abs(df15["Open"].iloc[-1] - df15["High"].iloc[-1]) < 0.05
+    )
+
+    # =====================================================
+    # MULTI TIMEFRAME
+    # =====================================================
+
+    close5 = df5["Close"]
+
+    ema5_fast = EMA(close5, 9)
+
+    ema5_slow = EMA(close5, 21)
+
+    buy_mtf = ema5_fast.iloc[-1] > ema5_slow.iloc[-1]
+
+    sell_mtf = ema5_fast.iloc[-1] < ema5_slow.iloc[-1]
+
+    # =====================================================
     # STRONG BUY
-    # =========================
+    # =====================================================
 
     if (
         ema9.iloc[-1] > ema21.iloc[-1]
         and ema21.iloc[-1] > ema50.iloc[-1]
         and latest_rsi > 60
         and volume_boost
+        and bullish_engulfing(df15)
+        and open_low
+        and buy_mtf
     ):
 
         return {
-            "signal": "STRONG BUY",
-            "probability": 92,
+            "signal": "🔥 STRONG BUY",
+            "probability": 93,
             "price": latest_close,
             "target1": latest_close * 1.02,
             "target2": latest_close * 1.04,
@@ -293,20 +378,23 @@ def generate_signal(df):
             "rsi": latest_rsi
         }
 
-    # =========================
+    # =====================================================
     # STRONG SELL
-    # =========================
+    # =====================================================
 
     if (
         ema9.iloc[-1] < ema21.iloc[-1]
         and ema21.iloc[-1] < ema50.iloc[-1]
         and latest_rsi < 40
         and volume_boost
+        and bearish_engulfing(df15)
+        and open_high
+        and sell_mtf
     ):
 
         return {
-            "signal": "STRONG SELL",
-            "probability": 90,
+            "signal": "🔥 STRONG SELL",
+            "probability": 91,
             "price": latest_close,
             "target1": latest_close * 0.98,
             "target2": latest_close * 0.96,
@@ -317,34 +405,13 @@ def generate_signal(df):
 
     return None
 
-# ============================================
-# 📲 TELEGRAM ALERT
-# ============================================
-
-def send_telegram(message):
-
-    if not TELEGRAM_ENABLED:
-        return
-
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-
-    data = {
-        "chat_id": CHAT_ID,
-        "text": message
-    }
-
-    try:
-        requests.post(url, data=data)
-    except:
-        pass
-
-# ============================================
-# 🔎 SCANNER
-# ============================================
+# =========================================================
+# 🔎 MARKET SCANNER
+# =========================================================
 
 def scan_market():
 
-    signals = []
+    results = []
 
     progress = st.progress(0)
 
@@ -358,9 +425,11 @@ def scan_market():
 
         progress.progress((i + 1) / total)
 
-        df = get_history(symbol)
+        df15 = get_history(symbol, "15m")
 
-        signal = generate_signal(df)
+        df5 = get_history(symbol, "5m")
+
+        signal = generate_signal(df15, df5)
 
         if signal:
 
@@ -374,11 +443,11 @@ def scan_market():
 
                 signal["change"] = live["change_percent"]
 
-                signals.append(signal)
+                results.append(signal)
 
                 send_telegram(
                     f"""
-{signal['signal']} ALERT
+{signal['signal']}
 
 {symbol}
 
@@ -394,39 +463,39 @@ Accuracy: {signal['probability']}%
 
     status.empty()
 
-    return signals
+    return results
 
-# ============================================
+# =========================================================
 # 🏠 MAIN UI
-# ============================================
+# =========================================================
 
-st.title("🎯 LIVE AI SIGNAL BOT")
+st.title("🚀 ADVANCED AI SIGNAL BOT")
 
-st.caption("📡 FYERS ONE + Excel + Real Candles")
+st.caption("📡 FYERS ONE + EXCEL + AI FILTER")
 
-# ============================================
-# 🔄 SCAN BUTTON
-# ============================================
+# =========================================================
+# 🔍 SCAN
+# =========================================================
 
 if st.button("🔍 SCAN MARKET"):
 
     with st.spinner("Scanning Market..."):
 
-        results = scan_market()
+        signals = scan_market()
 
-    if len(results) == 0:
+    if len(signals) == 0:
 
-        st.warning("No Signals Found")
+        st.warning("No Strong Signals")
 
     else:
 
-        st.success(f"{len(results)} Signals Found")
+        st.success(f"{len(signals)} Signals Found")
 
-        for sig in results:
+        for sig in signals:
 
-            if sig["signal"] == "STRONG BUY":
-                box = "buy-box"
-            else:
+            box = "buy-box"
+
+            if "SELL" in sig["signal"]:
                 box = "sell-box"
 
             st.markdown(
@@ -441,11 +510,11 @@ if st.button("🔍 SCAN MARKET"):
 
 <p>RSI: {sig['rsi']:.2f}</p>
 
-<p>Target 1: ₹{sig['target1']:.2f}</p>
+<p>Target1: ₹{sig['target1']:.2f}</p>
 
-<p>Target 2: ₹{sig['target2']:.2f}</p>
+<p>Target2: ₹{sig['target2']:.2f}</p>
 
-<p>Target 3: ₹{sig['target3']:.2f}</p>
+<p>Target3: ₹{sig['target3']:.2f}</p>
 
 <p>Stop Loss: ₹{sig['stop_loss']:.2f}</p>
 
@@ -454,14 +523,12 @@ if st.button("🔍 SCAN MARKET"):
                 unsafe_allow_html=True
             )
 
-            # ====================================
+            # =================================================
             # 📊 TRADINGVIEW CHART
-            # ====================================
+            # =================================================
 
             st.components.v1.html(
                 f"""
-<div class="tradingview-widget-container">
-
 <div id="tv_{sig['symbol']}"></div>
 
 <script src="https://s3.tradingview.com/tv.js"></script>
@@ -478,35 +545,27 @@ new TradingView.widget(
 "theme": "dark",
 "style": "1",
 "locale": "in",
-"toolbar_bg": "#111111",
-"enable_publishing": false,
-"hide_side_toolbar": false,
-"allow_symbol_change": true,
 "container_id": "tv_{sig['symbol']}"
 }}
 );
 
 </script>
-
-</div>
 """,
                 height=520
             )
 
-# ============================================
+# =========================================================
 # 🔔 SOUND ALERT
-# ============================================
+# =========================================================
 
 st.audio(
     "https://www.soundjay.com/buttons/sounds/beep-01a.mp3"
 )
 
-# ============================================
+# =========================================================
 # 📌 FOOTER
-# ============================================
+# =========================================================
 
 st.markdown("---")
 
-st.caption(
-    "🚀 Powered By FYERS ONE + Excel + AI Signal Logic"
-)
+st.caption("🔥 Powered By AI + FYERS ONE + EXCEL")
